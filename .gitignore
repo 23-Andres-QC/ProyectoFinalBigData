@@ -1,0 +1,12 @@
+# Datos (se regeneran con descarga.ipynb y lakehouse_bronze_silver.ipynb)
+raw/
+lakehouse/
+tmp_spark/
+spark-warehouse/
+metastore_db/
+derby.log
+
+# Python / Jupyter
+__pycache__/
+.ipynb_checkpoints/
+*.pyc
