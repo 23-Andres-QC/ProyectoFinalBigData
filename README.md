@@ -38,6 +38,8 @@ PC: raw/ (~57 GB, no se sube) ──Databricks Connect──► bronze ──►
 1. **Datos:** correr `descarga.ipynb` para crear `raw/`. Además, el notebook usa:
    - `raw/limites_inei/complemento_osm_la_punta_santa_anita.geojson` (límites de OpenStreetMap de dos distritos que el INEI trae sin geometría),
    - `raw/fragilidad_gem/` (curvas de fragilidad de GEM, incluidas `MUR-CL99_LWAL-DNO_H1..H5.csv`, `W-WWD_LWAL-DNO_H1..H2.csv` y `W_LFM-DUL_H1..H3.csv` de `fragility_curves/fragility_other_IMs/` del repositorio de GEM),
+   - `raw/limites_osm/distritos_lima_callao_osm.geojson` (distritos `admin_level = 8` de OpenStreetMap con `pe:ubigeo`; consulta Overpass guardada en `overpass_distritos_lima_callao.json`),
+   - `raw/microzonificacion_cismid/` (mapa PDF de CISMID y su digitalización `zonas_cismid_utm18s_25m.tif`; ver `LEEME.txt`),
    - `raw/censo2017/paredes_distrito_lima_callao.csv` (viviendas particulares por distrito y material de las paredes; consulta *Frecuencias* de `Vivienda.C2P3` por distrito en el REDATAM del Censo 2017, Provincia de Lima y Callao),
    - `raw/osm_niveles/lima_building_levels.json` (edificios de Lima con `building:levels` de OpenStreetMap; consulta Overpass `way["building"]["building:levels"](-12.52,-77.20,-11.57,-76.62); out tags center;`),
    - `raw/turquia_dano/2023Turkey_earthquake_data.zip` (Zenodo 18437501). La Parte 7 extrae de él las capas de daño y las huellas GBA con altura (~1.9 GB).
@@ -48,6 +50,8 @@ PC: raw/ (~57 GB, no se sube) ──Databricks Connect──► bronze ──►
 
 ## Métodos
 
+- **Distritos:** geometría detallada de OpenStreetMap (con el ubigeo del INEI) en lugar del GeoJSON simplificado del INEI, que deformaba los distritos (Breña 0.41 km² en vez de 3.22, Los Olivos 10.1 en vez de 18.3).
+- **Microzonificación:** el mapa de CISMID (PDF vectorial) se digitalizó leyendo sus polígonos y georreferenciándolo con sus límites distritales contra los de OSM; cada edificio recibe su zona (I a V) y su perfil E.030 (I → S1, II → S2, III a V → S3).
 - **Suelo y edificios:** el ráster de Vs30 de USGS rellena el mar con 600 m/s; esos píxeles toman el valor de tierra más cercano y el Vs30 se interpola (bilineal) en cada estación y edificio (las estaciones CAL001 y DHNPE del Callao pasaban de ~250 m/s a 600 m/s y se usaban como suelo firme de referencia). La altura de cada edificio es la mediana de los píxeles 2.5D dentro de su huella; frente a 22 800 edificios de OpenStreetMap con número de pisos acierta el ~51 % (centroide: ~49 %) con error medio de 0.73 pisos y sin sesgo.
 - **Espectros:** línea base, Butterworth 0.1–25 Hz, Sa(T) exacto (Nigam-Jennings) en 50 periodos, validado contra Newmark (< 0.5 %).
 - **Amplificación del suelo:** modelo de términos de evento `ln(Sa·R) = η(evento, T) + f(T, Vs30)` con un Random Forest **monótono en Vs30**, anclado en suelo firme (Vs30 ≥ 500 m/s), más el **término de sitio** de cada estación interpolado a las celdas H3 (*regression kriging*). Validado dejando estaciones fuera (sitios nuevos, como los edificios): error en ln ≈ 0.50, frente a ≈ 0.68–0.71 del método anterior (que memorizaba estaciones) y 0.58 sin modelo de suelo.
@@ -67,7 +71,7 @@ PC: raw/ (~57 GB, no se sube) ──Databricks Connect──► bronze ──►
 | USGS Vs30 global, ShakeMap us6000jllz (`grid.xml` y `uncertainty.xml`, versión 19) | Suelo, movimiento en Turquía y su incertidumbre | Dominio público (USGS) |
 | Google Open Buildings v3 y 2.5D Temporal | Huellas y alturas de edificios | CC BY 4.0 |
 | INEI (límites distritales) y OpenStreetMap | Distritos y validación de pisos (`building:levels`) | Datos públicos / ODbL © OpenStreetMap contributors |
-| CISMID/MVCS microzonificación (SIGRID) | Zonas y periodos del suelo | Documentos públicos |
+| CISMID/MVCS microzonificación (SIGRID) y Mapa de Microzonificación Sísmica de Lima y Callao (CISMID-UNI) | Zonas y periodos del suelo; zonas digitalizadas | Documentos públicos |
 | Norma E.030 (2018) | Perfiles de suelo, Z, S, TP, TL | Norma técnica peruana |
 | GEM global fragility model | Curvas de fragilidad | Martins L, Silva V (2021), *Bull Earthquake Eng*, doi:10.1007/s10518-020-00885-1 — CC BY-SA 4.0 |
 | xBD (xView2) | Escenas de daño | Gupta et al. (2019) — CC BY-NC-SA 4.0 |
@@ -80,7 +84,7 @@ PC: raw/ (~57 GB, no se sube) ──Databricks Connect──► bronze ──►
 
 - El Vs30 de USGS no detecta suelos blandos S3 en Lima. Falta digitalizar los mapas de microzonificación.
 - La tipología sale del censo por distrito (proporción de viviendas, no de edificios) y del número de pisos: no hay catastro abierto por edificio.
-- La microzonificación de CISMID (`raw/microzonificacion_cismid/Mapa_Microzonificacion.pdf`) solo está publicada como mapa PDF; falta digitalizar sus zonas.
+- La microzonificación de CISMID se digitalizó del mapa PDF oficial (georreferenciación con error mediano < 100 m); la categoría marrón de la leyenda no se pudo identificar. Sin estaciones en Zona IV, la zona se usa para el perfil E.030 y no para calibrar la amplificación.
 - Solo 5 sismos registrados, todos moderados (PGA ≤ 0.30 g).
 - La validación en Turquía usa daño de imágenes satelitales y una tipología supuesta por altura. El ShakeMap (~900 m) no resuelve la variación dentro de una ciudad: acierta la tasa de daño de Antakya, pero no qué edificios se dañan (AUC < 0.5). Jindires (Siria) queda fuera del dominio.
 - Pendiente: dashboard (Streamlit + Kepler.gl) y U-Net siamesa para los pares Maxar (requiere GPU).
