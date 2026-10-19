@@ -25,7 +25,7 @@ PC: raw/ (~57 GB, no se sube) ──Databricks Connect──► bronze ──►
 | 0 | Conexión (Databricks Connect serverless), catálogo `Grupo06ProyectoFinal`, esquemas `bronze`/`silver`/`gold`, volumen `bronze.volumen01` | — |
 | 1 | **Bronze**: 11 fuentes tal como llegaron + linaje (`_fuente`, `_archivo`, `_tanda`, `_fecha_ingesta`) | 16 tablas (`cismid_registros`, `open_buildings`, …) |
 | 2 | **Silver ondas**: espectros de respuesta Sa(T) 5 % de 137 acelerogramas CISMID | `ondas_registros`, `espectros`, `eventos` |
-| 3 | **Silver territorio**: 49 distritos, suelo E.030, microzonificación, 1.92 M edificios con pisos y periodo Tb | `distritos`, `suelo`, `edificios` |
+| 3 | **Silver territorio**: 49 distritos, suelo E.030 (Vs30 sin el relleno de mar e interpolado por edificio), microzonificación, 1.92 M edificios con pisos (altura por huella, validada con OpenStreetMap) y periodo Tb | `distritos`, `suelo`, `edificios`, `validacion_pisos_osm` |
 | 4 | **Silver validación**: xBD, Maxar, ShakeMap Turquía, STEAD | `xbd_escenas`, `maxar_pares`, `shakemap_turquia`, `stead_trazas` |
 | 5 | **Gold**: amplificación (Random Forest con términos de evento), kriging validado + escenarios (registrados, de diseño, E.030 y E.030 en roca × amplificación medida), demanda por edificio, daño (curvas GEM), K-means por edificio, rankings | `amplificacion_lima`, `amplificacion_validacion`, `kriging_validacion`, `demanda`, `dano_edificios`, `ranking_distritos`, `riesgo_h3` |
 | 6 | **Modelos**: detector de onda P (Gradient Boosting) y picador STA/LTA con STEAD | `stead_ventanas`, `stead_picks` |
@@ -38,6 +38,7 @@ PC: raw/ (~57 GB, no se sube) ──Databricks Connect──► bronze ──►
 1. **Datos:** correr `descarga.ipynb` para crear `raw/`. Además, el notebook usa:
    - `raw/limites_inei/complemento_osm_la_punta_santa_anita.geojson` (límites de OpenStreetMap de dos distritos que el INEI trae sin geometría),
    - `raw/fragilidad_gem/` (curvas de fragilidad de GEM, incluidas `MUR-CL99_LWAL-DNO_H1..H5.csv` de `fragility_curves/fragility_other_IMs/` del repositorio de GEM),
+   - `raw/osm_niveles/lima_building_levels.json` (edificios de Lima con `building:levels` de OpenStreetMap; consulta Overpass `way["building"]["building:levels"](-12.52,-77.20,-11.57,-76.62); out tags center;`),
    - `raw/turquia_dano/2023Turkey_earthquake_data.zip` (Zenodo 18437501). La Parte 7 extrae de él las capas de daño y las huellas GBA con altura (~1.9 GB).
 2. **Entorno:** kernel *Databricks Connect* (Python 3.12) con `databricks-connect`, `databricks-sdk`, `pandas`, `pyarrow`, `geopandas`, `shapely`, `rasterio`, `pypdf`, `pyproj`, `scipy`, `scikit-learn`, `h5py`, `pillow`, `matplotlib` (opcional: `mlflow`), y el perfil de Databricks en `~/.databrickscfg`.
 3. **Ejecución:** *Kernel → Restart & Run All*. Las tablas se sobrescriben, así que se puede volver a correr. La celda final de limpieza **no** borra nada salvo que se escriba `BORRAR CATALOGO` a propósito.
@@ -46,12 +47,14 @@ PC: raw/ (~57 GB, no se sube) ──Databricks Connect──► bronze ──►
 
 ## Métodos
 
+- **Suelo y edificios:** el ráster de Vs30 de USGS rellena el mar con 600 m/s; esos píxeles toman el valor de tierra más cercano y el Vs30 se interpola (bilineal) en cada estación y edificio (las estaciones CAL001 y DHNPE del Callao pasaban de ~250 m/s a 600 m/s y se usaban como suelo firme de referencia). La altura de cada edificio es la mediana de los píxeles 2.5D dentro de su huella; frente a 22 800 edificios de OpenStreetMap con número de pisos acierta el ~51 % (centroide: ~49 %) con error medio de 0.73 pisos y sin sesgo.
 - **Espectros:** línea base, Butterworth 0.1–25 Hz, Sa(T) exacto (Nigam-Jennings) en 50 periodos, validado contra Newmark (< 0.5 %).
-- **Amplificación del suelo:** modelo de términos de evento `ln(Sa·R) = η(evento, T) + f(T, Vs30)` con un Random Forest **monótono en Vs30**, anclado en suelo firme (Vs30 ≥ 500 m/s), más el **término de sitio** de cada estación interpolado a las celdas H3 (*regression kriging*). Validado dejando estaciones fuera (sitios nuevos, como los edificios): error en ln 0.53, frente a 0.71 del método anterior (que memorizaba estaciones) y 0.58 sin modelo de suelo.
-- **Demanda:** roca en las estaciones → kriging ordinario a celdas H3 r8 → amplificación por el Vs30 de cada edificio × término de sitio de su celda. Dejando una estación fuera: roca krigeada 0.22 en ln (media de las otras: 0.26) y demanda de punta a punta 0.48 (krigear directo la Sa observada: 0.52). Escenarios: los sismos registrados con al menos 10 estaciones, los que pueden escalarse a Z = 0.45 g sin multiplicarlos más de 10 veces, el espectro de diseño de la E.030 y el **escenario principal `e030_sitio`**: espectro E.030 en roca (S1) × amplificación medida de cada edificio. Las celdas a más de 10 km de una estación se marcan como extrapoladas, y el ranking de distritos solo incluye los que tienen al menos 1000 edificios y cobertura suficiente.
-- **Daño:** curvas lognormales del modelo global de GEM por tipología (adobe, albañilería confinada, concreto armado) y altura, en su propia medida de intensidad (PGA o Sa a 0.3/0.6/1.0 s), con banda de incertidumbre de la amplificación.
+- **Amplificación del suelo:** modelo de términos de evento `ln(Sa·R) = η(evento, T) + f(T, Vs30)` con un Random Forest **monótono en Vs30**, anclado en suelo firme (Vs30 ≥ 500 m/s), más el **término de sitio** de cada estación interpolado a las celdas H3 (*regression kriging*). Validado dejando estaciones fuera (sitios nuevos, como los edificios): error en ln ≈ 0.50, frente a ≈ 0.68–0.71 del método anterior (que memorizaba estaciones) y 0.58 sin modelo de suelo.
+- **Demanda:** roca en las estaciones → kriging ordinario a celdas H3 r8 → amplificación por el Vs30 de cada edificio × término de sitio de su celda. Dejando una estación fuera: roca krigeada ≈ 0.22 en ln (media de las otras: 0.26) y demanda de punta a punta ≈ 0.46 (krigear directo la Sa observada: 0.52). Escenarios: los sismos registrados con al menos 10 estaciones, los que pueden escalarse a Z = 0.45 g sin multiplicarlos más de 10 veces, el espectro de diseño de la E.030 y el **escenario principal `e030_sitio`**: espectro E.030 en roca (S1) × amplificación medida de cada edificio. Las celdas a más de 10 km de una estación se marcan como extrapoladas, y el ranking de distritos solo incluye los que tienen al menos 1000 edificios y cobertura suficiente.
+- **Daño:** curvas lognormales del modelo global de GEM por tipología (adobe, albañilería confinada, concreto armado) y altura, en su propia medida de intensidad (PGA o Sa a 0.3/0.6/1.0 s). La incertidumbre de la demanda medida en las validaciones (σ ≈ 0.46 en ln) se suma a la de la curva, `Φ(ln(IM/θ)/√(β²+σ²))`, y hay banda de incertidumbre de la amplificación. Periodo de cada edificio con la fórmula de la E.030, `Tb = h/C_T` (C_T = 60 albañilería/adobe, 45 concreto), con su altura medida.
 - **Perfiles de riesgo:** K-means por edificio (escenario `e030_sitio`) sobre (ln Sa(Tb), ln IM/θ_colapso, Tb/TP, Vs30, ln pisos), k elegido por silueta.
-- **Validación:** daño predicho (ShakeMap del USGS interpolado + curvas GEM según la altura GBA de cada edificio: albañilería no reforzada en 1–2 pisos, concreto con tabiquería en 3 o más) frente al daño observado por interpretación visual en Antakya, Nurdağı y Jindires.
+- **Validación:** daño predicho (ShakeMap del USGS interpolado, con su incertidumbre oficial `uncertainty.xml`, + curvas GEM según la altura GBA de cada edificio: albañilería no reforzada en 1–2 pisos, concreto con tabiquería en 3 o más) frente al daño observado por interpretación visual en Antakya, Nurdağı y Jindires.
+- **Detector de onda P:** Gradient Boosting entrenado con negativas difíciles (ruido previo, ventanas dentro del sismo y llegada de la onda S); con solo ruido previo disparaba en ~84 % de las llegadas S.
 - **Tiempo real:** el acelerograma se reproduce por lotes en una tabla Delta que hace de tópico (en Databricks serverless no hay Kafka) y Structured Streaming calcula la energía por ventanas; el STA/LTA dispara la alerta.
 
 ## Fuentes y licencias
@@ -59,9 +62,9 @@ PC: raw/ (~57 GB, no se sube) ──Databricks Connect──► bronze ──►
 | Fuente | Uso | Licencia / cita |
 |---|---|---|
 | CISMID-UNI (REDACIS) | Acelerogramas de Lima | Datos públicos del CISMID |
-| USGS Vs30 global, ShakeMap us6000jllz | Suelo y movimiento en Turquía | Dominio público (USGS) |
+| USGS Vs30 global, ShakeMap us6000jllz (`grid.xml` y `uncertainty.xml`, versión 19) | Suelo, movimiento en Turquía y su incertidumbre | Dominio público (USGS) |
 | Google Open Buildings v3 y 2.5D Temporal | Huellas y alturas de edificios | CC BY 4.0 |
-| INEI (límites distritales) y OpenStreetMap | Distritos | Datos públicos / ODbL © OpenStreetMap contributors |
+| INEI (límites distritales) y OpenStreetMap | Distritos y validación de pisos (`building:levels`) | Datos públicos / ODbL © OpenStreetMap contributors |
 | CISMID/MVCS microzonificación (SIGRID) | Zonas y periodos del suelo | Documentos públicos |
 | Norma E.030 (2018) | Perfiles de suelo, Z, S, TP, TL | Norma técnica peruana |
 | GEM global fragility model | Curvas de fragilidad | Martins L, Silva V (2021), *Bull Earthquake Eng*, doi:10.1007/s10518-020-00885-1 — CC BY-SA 4.0 |
