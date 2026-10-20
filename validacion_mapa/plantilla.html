@@ -1,0 +1,610 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Validación espacial Lima</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root {
+    --fondo: #f6f6f4; --panel: #ffffff; --texto: #1d1d1b; --suave: #6b6b66; --borde: #deded9;
+    --ok: #1a7f4b; --mal: #b42318; --aviso: #a15c00; --acento: #2457c5;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--fondo); color: var(--texto);
+    font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #app { display: flex; height: 100%; }
+  #panel { width: 340px; flex: none; overflow-y: auto; background: var(--panel); border-right: 1px solid var(--borde); padding: 14px 16px 24px; }
+  #mapa { flex: 1; }
+  h1 { font-size: 16px; margin: 0 0 2px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--suave); margin: 18px 0 6px; }
+  .sub { color: var(--suave); font-size: 12px; }
+  label.capa { display: flex; align-items: center; gap: 6px; margin: 4px 0; cursor: pointer; }
+  select, input[type=range] { width: 100%; margin: 3px 0 6px; }
+  select { padding: 4px; border: 1px solid var(--borde); border-radius: 4px; background: #fff; font: inherit; }
+  .fila { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; border-bottom: 1px dotted var(--borde); }
+  .fila b { font-variant-numeric: tabular-nums; }
+  .ok { color: var(--ok); } .mal { color: var(--mal); } .aviso { color: var(--aviso); }
+  .nota { color: var(--suave); font-size: 11.5px; margin: 4px 0; }
+  .leyenda { background: rgba(255,255,255,.95); padding: 8px 10px; border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,.25); min-width: 190px; font-size: 12px; }
+  .leyenda .titulo { font-weight: 600; margin-bottom: 4px; }
+  .leyenda .barra { height: 10px; border-radius: 2px; }
+  .leyenda .extremos { display: flex; justify-content: space-between; color: var(--suave); }
+  .leyenda .cat { display: flex; align-items: center; gap: 6px; }
+  .leyenda .cat i { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
+  .leyenda + .leyenda { margin-top: 6px; }
+  .leaflet-popup-content { font-size: 12px; min-width: 220px; }
+  .leaflet-popup-content table { border-collapse: collapse; width: 100%; }
+  .leaflet-popup-content td { padding: 1px 4px; border-bottom: 1px dotted #ddd; }
+  .leaflet-popup-content td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  .etq-distrito { background: none; border: none; box-shadow: none; font-weight: 600; font-size: 11px; color: #222;
+    text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff; }
+  .etq-distrito::before { display: none; }
+  .sin-etiquetas .etq-distrito { display: none; }
+  .tabla-grupos { width: 100%; border-collapse: collapse; margin-top: 8px; font-variant-numeric: tabular-nums; font-size: 12px; }
+  .tabla-grupos th { text-align: right; color: var(--suave); font-weight: 500; border-bottom: 1px solid var(--borde); padding: 2px 3px; }
+  .tabla-grupos td { text-align: right; padding: 2px 3px; border-bottom: 1px dotted var(--borde); }
+  .tabla-grupos th:first-child, .tabla-grupos td:first-child { text-align: left; }
+  .enlace { cursor: pointer; }
+  .enlace:hover { background: #eef2fb; }
+  @media (max-width: 760px) {
+    #app { flex-direction: column; }
+    #panel { width: 100%; height: 42%; border-right: none; border-bottom: 1px solid var(--borde); }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="panel">
+    <h1>Validación espacial · Lima y Callao</h1>
+    <div class="sub" id="generado"></div>
+
+    <h2>Capas</h2>
+    <label class="capa"><input type="checkbox" id="c-distritos" checked> Distritos (silver.distritos)</label>
+    <label class="capa"><input type="checkbox" id="c-hex" checked> Hexágonos H3 r8</label>
+    <label class="capa"><input type="checkbox" id="c-edif" checked> Edificios (muestra con huella)</label>
+    <label class="capa"><input type="checkbox" id="c-osm"> Validación de pisos con OSM</label>
+    <label class="capa"><input type="checkbox" id="c-suelo"> Grilla de suelo (silver.suelo)</label>
+    <label class="capa"><input type="checkbox" id="c-est" checked> Estaciones CISMID</label>
+    <label class="capa"><input type="checkbox" id="c-malos"> Solo edificios con alerta</label>
+
+    <label>Ir a distrito<select id="ir-distrito"><option value="">— todos —</option></select></label>
+
+    <h2>Hexágonos</h2>
+    <label>Métrica<select id="hex-metrica"></select></label>
+    <label id="lbl-esc">Escenario<select id="hex-esc"></select></label>
+    <label>Opacidad <input type="range" id="hex-op" min="0" max="1" step="0.05" value="0.55"></label>
+
+    <h2>Edificios</h2>
+    <label>Color por<select id="edif-color">
+      <option value="pisos">Pisos</option>
+      <option value="altura_m">Altura (m)</option>
+      <option value="altura_metodo">Método de altura</option>
+      <option value="vs30">Vs30 (m/s)</option>
+      <option value="tipo_suelo">Tipo de suelo E.030</option>
+      <option value="Tb_TP">Tb / TP (resonancia ≈ 1)</option>
+      <option value="confianza">Confianza Open Buildings</option>
+      <option value="pisos_metodo">Origen de los pisos (OSM, 2.5D, imputado)</option>
+      <option value="error_osm">Error 2.5D vs. OSM (solo con dato OSM)</option>
+      <option value="alerta">Alertas de validación</option>
+    </select></label>
+    <div class="nota" id="nota-edif"></div>
+
+    <h2>Validación de alturas con OSM (dato real)</h2>
+    <div class="nota">Cada edificio de OpenStreetMap con <code>building:levels</code> se compara con la <b>estimación 2.5D</b> (<code>pisos_25d</code>) del edificio cuya huella lo contiene (o, si no, el de centroide a &lt; 8 m). Donde OSM existe y el 2.5D no lo contradice, el modelo ya usa los pisos de OSM (<code>pisos_metodo = osm</code>).</div>
+    <div id="res-osm"></div>
+    <div class="nota">En el mapa (capa «Validación de pisos con OSM»): color = pisos 2.5D − pisos de OSM (azul: el 2.5D se queda corto; rojo: se pasa; gris: sin pareja).</div>
+    <h2>Edificios altos peor estimados (OSM ≥ 10 pisos)</h2>
+    <div class="nota">Clic para ir al edificio; en la ficha hay un enlace a la vista 3D de Google para contar los pisos.</div>
+    <div id="peores"></div>
+
+    <h2>Chequeos automáticos</h2>
+    <div id="chequeos"></div>
+  </aside>
+  <div id="mapa"></div>
+</div>
+
+<script>
+const D = /*__DATOS__*/null;
+if (!D) {
+  document.body.innerHTML = '<p style="padding:24px;font-size:15px">Esta es solo la plantilla, sin datos. Abra <b>mapa_validacion.html</b> ' +
+    '(se genera con <code>python validacion_mapa/generar_mapa.py</code>).</p>';
+  throw new Error("plantilla sin datos");
+}
+
+// ---------------- utilidades ----------------
+const fmt = (v, d = 2) => v == null || Number.isNaN(v) ? "—" : (typeof v === "number" ? v.toLocaleString("es-PE", { maximumFractionDigits: d }) : v);
+const VIRIDIS = ["#440154", "#3b528b", "#21918c", "#5ec962", "#fde725"];
+const MAGMA = ["#000004", "#51127c", "#b73779", "#fc8961", "#fcfdbf"];
+const DIVERGENTE = ["#2166ac", "#67a9cf", "#f7f7f7", "#ef8a62", "#b2182b"];
+const CATS = ["#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f", "#edc948", "#b07aa1", "#ff9da7", "#9c755f", "#bab0ac"];
+function hex2rgb(h) { const n = parseInt(h.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; }
+function rampa(colores) {
+  const rgb = colores.map(hex2rgb);
+  return t => {
+    if (t == null || Number.isNaN(t)) return "#999";
+    t = Math.max(0, Math.min(1, t)) * (rgb.length - 1);
+    const i = Math.min(Math.floor(t), rgb.length - 2), f = t - i;
+    const c = rgb[i].map((a, k) => Math.round(a + (rgb[i + 1][k] - a) * f));
+    return `rgb(${c[0]},${c[1]},${c[2]})`;
+  };
+}
+function cuantil(arr, q) {
+  const v = arr.filter(x => x != null && !Number.isNaN(x)).sort((a, b) => a - b);
+  if (!v.length) return 0;
+  return v[Math.min(v.length - 1, Math.floor(q * (v.length - 1)))];
+}
+// escala continua con dominio robusto (p2–p98) o fijo
+function escalaContinua(valores, colores, dominio, log) {
+  let [a, b] = dominio || [cuantil(valores, 0.02), cuantil(valores, 0.98)];
+  if (a === b) b = a + 1;
+  const f = rampa(colores);
+  const tr = log ? (x => Math.log10(Math.max(x, 1e-6))) : (x => x);
+  const ta = tr(a), tb = tr(b);
+  return { color: v => v == null ? "#999" : f((tr(v) - ta) / (tb - ta)), min: a, max: b, colores, log };
+}
+const merc = (lon, lat) => {
+  const s = Math.sin(lat * Math.PI / 180);
+  return [(lon + 180) / 360, 0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)];
+};
+function tablaPopup(titulo, filas) {
+  return `<b>${titulo}</b><table>${filas.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("")}</table>`;
+}
+
+// ---------------- mapa base ----------------
+const mapa = L.map("mapa", { preferCanvas: false, zoomControl: true }).setView([-12.06, -77.03], 11);
+const bases = {
+  "Satélite (Esri)": L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    { maxZoom: 20, maxNativeZoom: 19, attribution: "Imágenes © Esri, Maxar, Earthstar Geographics" }),
+  "OpenStreetMap": L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    { maxZoom: 20, maxNativeZoom: 19, attribution: "© OpenStreetMap" }),
+  "Claro (Carto)": L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+    { maxZoom: 20, attribution: "© OpenStreetMap © CARTO" }),
+};
+const GOOGLE_KEY = /*__GOOGLE_KEY__*/"";
+const ctrlBases = L.control.layers(bases, null, { position: "topright" }).addTo(mapa);
+if (GOOGLE_KEY) {
+  // Google Map Tiles API: una sesión por tipo de mapa; las capas se agregan cuando la sesión responde
+  const tipos = [["Google · mapa", { mapType: "roadmap" }], ["Google · satélite", { mapType: "satellite" }],
+    ["Google · híbrido", { mapType: "satellite", layerTypes: ["layerRoadmap"], overlay: false }]];
+  Promise.all(tipos.map(([nombre, cfg]) =>
+    fetch(`https://tile.googleapis.com/v1/createSession?key=${GOOGLE_KEY}`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ language: "es-PE", region: "PE", ...cfg }),
+    }).then(r => r.json()).then(j => {
+      if (!j.session) throw new Error(JSON.stringify(j));
+      const capa = L.tileLayer(`https://tile.googleapis.com/v1/2dtiles/{z}/{x}/{y}?session=${j.session}&key=${GOOGLE_KEY}`,
+        { maxZoom: 22, maxNativeZoom: 21, attribution: "Datos del mapa © Google" });
+      ctrlBases.addBaseLayer(capa, nombre);
+      return [nombre, capa];
+    }).catch(err => { console.warn("Google Map Tiles no disponible:", nombre, err); return null; })
+  )).then(capas => {
+    const hib = capas.find(c => c && c[0] === "Google · híbrido") || capas.find(c => c);
+    if (hib) { Object.values(bases).forEach(b => b.remove()); hib[1].addTo(mapa); }
+    else bases["Claro (Carto)"].addTo(mapa);
+  });
+} else {
+  bases["Claro (Carto)"].addTo(mapa);
+}
+L.control.scale({ imperial: false }).addTo(mapa);
+[["suelo", 330], ["hex", 380], ["distritos", 420], ["edif", 440], ["osm", 450]].forEach(([n, z]) => {
+  mapa.createPane(n).style.zIndex = z;
+});
+mapa.getPane("distritos").style.pointerEvents = "none";
+document.getElementById("generado").textContent = `Datos del lakehouse · generado ${D.generado}`;
+
+// ---------------- capa canvas genérica (miles de puntos/polígonos) ----------------
+const CapaCanvas = L.Layer.extend({
+  initialize(opts) { this.o = opts; },
+  onAdd(m) {
+    this._m = m;
+    this._c = L.DomUtil.create("canvas", "leaflet-zoom-hide");
+    this._c.style.position = "absolute";
+    m.getPane(this.o.pane).appendChild(this._c);
+    m.on("moveend resize viewreset", this.dibujar, this);
+    m.on("zoomstart", this._ocultar, this);
+    this.dibujar();
+  },
+  onRemove(m) {
+    this._c.remove();
+    m.off("moveend resize viewreset", this.dibujar, this);
+    m.off("zoomstart", this._ocultar, this);
+  },
+  _ocultar() { this._c.style.visibility = "hidden"; },
+  _transf() {
+    const m = this._m, W = m.options.crs.scale(m.getZoom()), pb = m.getPixelBounds();
+    return { W, x0: pb.min.x, y0: pb.min.y };
+  },
+  dibujar() {
+    if (!this._m) return;
+    const m = this._m, s = m.getSize(), dpr = window.devicePixelRatio || 1, c = this._c;
+    c.width = s.x * dpr; c.height = s.y * dpr; c.style.width = s.x + "px"; c.style.height = s.y + "px";
+    L.DomUtil.setPosition(c, m.containerPointToLayerPoint([0, 0]));
+    c.style.visibility = "visible";
+    const ctx = c.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const t = this._transf();
+    this._visibles = this.o.dibujar(ctx, t, s, m.getZoom());
+  },
+  // devuelve el índice del elemento bajo el punto (coordenadas de contenedor)
+  buscar(p) { return this._m && this._visibles ? this.o.buscar(p, this._transf(), this._m.getZoom(), this._visibles) : -1; },
+});
+
+// ---------------- distritos ----------------
+const capaDistritos = L.geoJSON(D.distritos, {
+  pane: "distritos", interactive: false,
+  style: { color: "#111", weight: 1.4, opacity: 0.8, fill: false, dashArray: null },
+  onEachFeature: (f, l) => l.bindTooltip(f.properties.distrito, { permanent: true, direction: "center", className: "etq-distrito" }),
+});
+const selDist = document.getElementById("ir-distrito");
+D.distritos.features.map(f => f.properties.distrito).sort().forEach(n => selDist.add(new Option(n, n)));
+selDist.onchange = () => {
+  if (!selDist.value) { mapa.fitBounds(capaDistritos.getBounds()); return; }
+  capaDistritos.eachLayer(l => { if (l.feature.properties.distrito === selDist.value) mapa.fitBounds(l.getBounds()); });
+};
+function etiquetas() { document.getElementById("mapa").classList.toggle("sin-etiquetas", mapa.getZoom() < 12); }
+mapa.on("zoomend", etiquetas); etiquetas();
+
+// ---------------- hexágonos ----------------
+const H = D.hex, nHex = H.h3_r8.length;
+const METRICAS = [
+  ["edificios", "Edificios por hexágono", null, MAGMA, true],
+  ["pisos_medio", "Pisos medio", null, VIRIDIS],
+  ["pisos_max", "Pisos máximo", null, VIRIDIS],
+  ["altura_media", "Altura media (m)", null, VIRIDIS],
+  ["pct_imputada", "% altura imputada", [0, 100], MAGMA],
+  ["vs30_medio", "Vs30 medio (m/s)", null, VIRIDIS],
+  ["Tb_TP_medio", "Tb/TP medio", null, VIRIDIS],
+  ["n_distritos", "Distritos que toca el hexágono", [1, 3], MAGMA],
+  ["esc:Sa_Tb_mediana_g", "Sa(Tb) mediana (g)", null, MAGMA],
+  ["esc:pga_roca_g", "PGA en roca, kriging (g)", null, MAGMA],
+  ["esc:kriging_sd_rel", "Incertidumbre kriging (sd rel.)", null, MAGMA],
+  ["esc:dist_estacion_km", "Distancia a la estación (km)", null, MAGMA],
+  ["esc:P_colapso_media", "P(colapso) media", null, MAGMA],
+  ["esc:dano_esperado_medio", "Daño esperado medio", null, MAGMA],
+  ["esc:pct_P_colapso_mayor_umbral", "% edificios P(colapso) > umbral", null, MAGMA],
+  ["esc:pct_resonancia", "% edificios en resonancia", null, MAGMA],
+  ["esc:pct_fuera_cobertura", "% fuera de cobertura", [0, 100], MAGMA],
+];
+const selMet = document.getElementById("hex-metrica"), selEsc = document.getElementById("hex-esc");
+METRICAS.forEach(([k, n]) => selMet.add(new Option(n, k)));
+D.escenarios.escenario.forEach((e, i) => selEsc.add(new Option(`${e} (${D.escenarios.tipo[i]})`, e)));
+const hexFeatures = H.borde.map((b, i) => ({ type: "Feature", properties: { i }, geometry: { type: "Polygon", coordinates: [[...b, b[0]]] } }));
+let hexEscala = null, hexValores = [], hexClick = null;
+const capaHex = L.geoJSON({ type: "FeatureCollection", features: hexFeatures }, {
+  pane: "hex",
+  style: () => ({ weight: 0.6, color: "#fff", opacity: 0.7, fillOpacity: 0.55 }),
+  onEachFeature: (f, l) => {
+    l.bindTooltip(() => `${H.h3_r8[f.properties.i]}<br>${selMet.selectedOptions[0].text}: <b>${fmt(hexValores[f.properties.i], 3)}</b>`, { sticky: true });
+    l.on("click", () => { hexClick = f.properties.i; });
+  },
+});
+function valoresHex() {
+  const k = selMet.value;
+  if (k.startsWith("esc:")) { const e = D.hex_esc[selEsc.value]; return e ? e[k.slice(4)] : Array(nHex).fill(null); }
+  return H[k];
+}
+function pintarHex() {
+  const def = METRICAS.find(m => m[0] === selMet.value);
+  document.getElementById("lbl-esc").style.opacity = selMet.value.startsWith("esc:") ? 1 : 0.4;
+  hexValores = valoresHex();
+  hexEscala = escalaContinua(hexValores, def[3], def[2], def[4]);
+  const op = +document.getElementById("hex-op").value;
+  capaHex.eachLayer(l => {
+    const v = hexValores[l.feature.properties.i];
+    l.setStyle({ fillColor: hexEscala.color(v), fillOpacity: v == null ? op * 0.25 : op });
+  });
+  leyendas();
+}
+selMet.onchange = selEsc.onchange = pintarHex;
+document.getElementById("hex-op").oninput = pintarHex;
+function popupHex(i) {
+  const filas = [["Distrito (moda)", H.distrito[i]], ["Distritos que toca", H.n_distritos[i]], ["Edificios", fmt(H.edificios[i], 0)],
+    ["Pisos medio / máx", `${fmt(H.pisos_medio[i])} / ${H.pisos_max[i]}`], ["Altura media", fmt(H.altura_media[i], 1) + " m"],
+    ["% altura imputada", fmt(H.pct_imputada[i], 1)], ["Vs30 medio", fmt(H.vs30_medio[i], 0)], ["Suelo (moda)", H.tipo_suelo[i]],
+    ["Tb/TP medio", fmt(H.Tb_TP_medio[i], 3)]];
+  const e = D.hex_esc[selEsc.value];
+  if (e) {
+    filas.push([`<i>Escenario ${selEsc.value}</i>`, ""]);
+    for (const [k, n] of METRICAS.filter(m => m[0].startsWith("esc:"))) filas.push([n, fmt(e[k.slice(4)][i], 4)]);
+  }
+  return tablaPopup(`Hexágono ${H.h3_r8[i]}`, filas);
+}
+
+// ---------------- edificios ----------------
+const B = D.edificios, nB = B.id.length, CE = D.cats_edif;
+const bX = new Float64Array(nB), bY = new Float64Array(nB), bPoly = new Array(nB);
+for (let i = 0; i < nB; i++) {
+  [bX[i], bY[i]] = merc(B.lon[i], B.lat[i]);
+  const g = B.g[i], p = new Float64Array(g.length);
+  for (let k = 0; k < g.length; k += 2) [p[k], p[k + 1]] = merc(B.lon[i] + g[k] / 1e6, B.lat[i] + g[k + 1] / 1e6);
+  bPoly[i] = p;
+}
+const alerta = i => {
+  const a = [];
+  if (!B.distrito_ok[i]) a.push("centroide fuera de su distrito");
+  if (B.dist_centroide_m[i] > 5) a.push(`punto a ${fmt(B.dist_centroide_m[i], 1)} m del centroide de la huella`);
+  if (B.altura_m[i] != null && B.pisos[i]) { const r = B.altura_m[i] / B.pisos[i]; if (r > 6 || r < 1.8) a.push(`altura/piso = ${fmt(r, 1)} m`); }
+  return a;
+};
+const bAlerta = Array.from({ length: nB }, (_, i) => alerta(i));
+const nAlertas = bAlerta.filter(a => a.length).length;
+let edifColor = () => "#999", edifLeyenda = null;
+function prepararColorEdif() {
+  const k = document.getElementById("edif-color").value;
+  const catEsc = (cats, nombre) => {
+    const col = cats.map((_, j) => CATS[j % CATS.length]);
+    edifColor = i => B[k][i] == null ? "#999" : col[B[k][i]];
+    edifLeyenda = { titulo: nombre, cats: cats.map((c, j) => [c, col[j]]) };
+  };
+  if (k === "altura_metodo") return catEsc(CE.altura_metodo, "Método de altura");
+  if (k === "tipo_suelo") return catEsc(CE.tipo_suelo, "Tipo de suelo E.030");
+  if (k === "pisos_metodo") return catEsc(CE.pisos_metodo, "Origen de los pisos");
+  if (k === "error_osm") {
+    const esc = escalaContinua(null, DIVERGENTE, [-4, 4]);
+    edifColor = i => B.niveles_osm[i] == null ? "rgba(150,150,150,.35)" : esc.color(B.pisos_25d[i] - B.niveles_osm[i]);
+    edifLeyenda = { titulo: "pisos 2.5D − pisos OSM (gris: sin OSM)", escala: esc };
+    return;
+  }
+  if (k === "alerta") {
+    edifColor = i => bAlerta[i].length ? "#e31a1c" : "#33a02c";
+    edifLeyenda = { titulo: "Alertas", cats: [["sin alerta", "#33a02c"], ["con alerta", "#e31a1c"]] };
+    return;
+  }
+  const dom = { pisos: [1, 10], altura_m: [3, 30], Tb_TP: [0, 2], confianza: [0.65, 1] }[k];
+  const esc = escalaContinua(B[k], k === "Tb_TP" ? DIVERGENTE : VIRIDIS, dom);
+  edifColor = i => esc.color(B[k][i]);
+  edifLeyenda = { titulo: document.getElementById("edif-color").selectedOptions[0].text, escala: esc };
+}
+const soloMalos = document.getElementById("c-malos");
+const capaEdif = new CapaCanvas({
+  pane: "edif",
+  dibujar(ctx, t, s, z) {
+    const vis = [], huella = z >= 15, r = z >= 13 ? 2.2 : 1.4;
+    ctx.lineWidth = 0.6; ctx.strokeStyle = "rgba(0,0,0,.55)";
+    for (let i = 0; i < nB; i++) {
+      if (soloMalos.checked && !bAlerta[i].length) continue;
+      const x = bX[i] * t.W - t.x0, y = bY[i] * t.W - t.y0;
+      if (x < -50 || y < -50 || x > s.x + 50 || y > s.y + 50) continue;
+      vis.push(i);
+      ctx.fillStyle = edifColor(i);
+      const p = bPoly[i];
+      if (huella && p.length >= 6) {
+        ctx.beginPath();
+        for (let k = 0; k < p.length; k += 2) ctx.lineTo(p[k] * t.W - t.x0, p[k + 1] * t.W - t.y0);
+        ctx.closePath(); ctx.globalAlpha = 0.8; ctx.fill(); ctx.globalAlpha = 1; ctx.stroke();
+      } else {
+        ctx.fillRect(x - r, y - r, 2 * r, 2 * r);
+      }
+    }
+    return vis;
+  },
+  buscar(p, t, z, vis) {
+    let mejor = -1, dmin = 36;
+    for (const i of vis) {
+      if (z >= 15 && bPoly[i].length >= 6 && dentro(p, bPoly[i], t)) return i;
+      const dx = bX[i] * t.W - t.x0 - p.x, dy = bY[i] * t.W - t.y0 - p.y, d = dx * dx + dy * dy;
+      if (d < dmin) { dmin = d; mejor = i; }
+    }
+    return mejor;
+  },
+});
+function dentro(p, poly, t) {
+  let ok = false;
+  for (let a = 0, b = poly.length - 2; a < poly.length; b = a, a += 2) {
+    const xa = poly[a] * t.W - t.x0, ya = poly[a + 1] * t.W - t.y0, xb = poly[b] * t.W - t.x0, yb = poly[b + 1] * t.W - t.y0;
+    if ((ya > p.y) !== (yb > p.y) && p.x < (xb - xa) * (p.y - ya) / (yb - ya) + xa) ok = !ok;
+  }
+  return ok;
+}
+function popupEdif(i) {
+  const al = bAlerta[i];
+  return tablaPopup(`Edificio ${B.id[i]}`, [
+    ["Distrito", CE.distrito[B.distrito[i]]], ["H3 r8", B.h3_r8[i]],
+    ["Pisos", `${B.pisos[i]} <span style="color:#888">(${CE.pisos_metodo[B.pisos_metodo[i]]})</span>`],
+    ["Altura", `${fmt(B.altura_m[i], 1)} m <span style="color:#888">(${CE.altura_metodo[B.altura_metodo[i]]})</span>`],
+    ["Área huella", fmt(B.area_m2[i], 0) + " m²"], ["Confianza OB", fmt(B.confianza[i], 3)],
+    ["Tb", fmt(B.Tb[i], 3) + " s"], ["Tb / TP", fmt(B.Tb_TP[i], 2)],
+    ["Vs30", fmt(B.vs30[i], 0) + " m/s"], ["Suelo E.030", CE.tipo_suelo[B.tipo_suelo[i]]],
+    ["Fuente del perfil", CE.perfil_fuente[B.perfil_fuente[i]] ?? "—"], ["Zona CISMID", B.zona_cismid[i] ?? "—"],
+    ["Pisos estimados 2.5D", B.pisos_25d[i]],
+    ["Pisos según OSM (real)", B.niveles_osm[i] == null ? "—" :
+      `<b class="${Math.abs(B.pisos_25d[i] - B.niveles_osm[i]) <= 1 ? "ok" : "mal"}">${fmt(B.niveles_osm[i], 1)}</b>`],
+    ["Altura máx. en la huella", fmt(B.altura_max_m[i], 1) + " m"],
+    ["Alertas", al.length ? `<span class="mal">${al.join("<br>")}</span>` : '<span class="ok">ninguna</span>'],
+  ]) + enlaces(B.lat[i], B.lon[i]);
+}
+document.getElementById("edif-color").onchange = () => { prepararColorEdif(); capaEdif.dibujar(); leyendas(); };
+soloMalos.onchange = () => capaEdif.dibujar();
+document.getElementById("nota-edif").innerHTML =
+  `${nB.toLocaleString("es-PE")} edificios de ${D.chequeos.globales.total.toLocaleString("es-PE")}: ${D.parametros.por_distrito} al azar por distrito, ` +
+  `todos los de ${D.parametros.completos.join(", ")}, todos los de ≥ ${D.parametros.pisos_altos} pisos y todos los que OSM registra con ≥ 5 pisos. ` +
+  `Desde zoom 15 se dibuja la huella real. Use un fondo satelital (arriba a la derecha) para comparar.`;
+
+// ---------------- validación OSM ----------------
+const O = D.osm, nO = O.osm_id.length;
+const oX = new Float64Array(nO), oY = new Float64Array(nO);
+for (let i = 0; i < nO; i++) [oX[i], oY[i]] = merc(O.lon[i], O.lat[i]);
+const escOsm = escalaContinua(null, DIVERGENTE, [-4, 4]);
+const capaOsm = new CapaCanvas({
+  pane: "osm",
+  dibujar(ctx, t, s, z) {
+    const vis = [], r = z >= 15 ? 5 : z >= 13 ? 3.5 : 2.2;
+    ctx.lineWidth = 0.8; ctx.strokeStyle = "#222";
+    for (let i = 0; i < nO; i++) {
+      const x = oX[i] * t.W - t.x0, y = oY[i] * t.W - t.y0;
+      if (x < -10 || y < -10 || x > s.x + 10 || y > s.y + 10) continue;
+      vis.push(i);
+      ctx.fillStyle = O.pisos[i] == null ? "#9a9a9a" : escOsm.color(O.pisos[i] - O.niveles[i]);
+      ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI); ctx.fill(); if (z >= 13) ctx.stroke();
+    }
+    return vis;
+  },
+  buscar(p, t, z, vis) {
+    let mejor = -1, dmin = 64;
+    for (const i of vis) {
+      const dx = oX[i] * t.W - t.x0 - p.x, dy = oY[i] * t.W - t.y0 - p.y, d = dx * dx + dy * dy;
+      if (d < dmin) { dmin = d; mejor = i; }
+    }
+    return mejor;
+  },
+});
+const enlaces = (lat, lon, osmId) =>
+  `<div style="margin-top:4px"><a target="_blank" href="https://www.google.com/maps/@${lat},${lon},120a,35y,0h,65t/data=!3m1!1e3">Google Maps 3D</a>` +
+  ` · <a target="_blank" href="https://www.google.com/maps?q=&layer=c&cbll=${lat},${lon}">Street View</a>` +
+  (osmId ? ` · <a target="_blank" href="https://www.openstreetmap.org/way/${osmId}">OSM</a>` : "") + `</div>`;
+function popupOsm(i) {
+  const par = O.pisos[i] != null, dif = par ? O.pisos[i] - O.niveles[i] : null;
+  return tablaPopup(`OSM ${O.osm_id[i]}`, [
+    ["Pisos según OSM (real)", fmt(O.niveles[i], 1)], ["Pisos estimados 2.5D", par ? O.pisos[i] : "—"],
+    ["Pisos finales del modelo", par ? `${O.pisos_final[i]} (${D.cats_osm.pisos_metodo[O.pisos_metodo[i]]})` : "—"],
+    ["Diferencia", par ? `<b class="${Math.abs(dif) <= 1 ? "ok" : "mal"}">${fmt(dif, 1)}</b>` : "—"],
+    ["Altura 2.5D del modelo", fmt(O.altura_m[i], 1) + " m"], ["Altura esperada (OSM × 3 m)", fmt(O.niveles[i] * 3, 0) + " m"],
+    ["Emparejado por", D.cats_osm.pareja[O.pareja[i]]], ["Edificio del modelo", O.id[i] ?? "—"],
+    ["Distancia al centroide", fmt(O.dist_m[i], 1) + " m"],
+    ["Método altura", par ? D.cats_osm.altura_metodo[O.altura_metodo[i]] : "—"],
+  ]) + enlaces(O.lat[i], O.lon[i], O.osm_id[i]);
+}
+
+// ---------------- suelo ----------------
+const S = D.suelo, nS = S.lon.length, paso = D.suelo_paso / 2;
+const sRect = Array.from({ length: nS }, (_, i) => [merc(S.lon[i] - paso, S.lat[i] + paso), merc(S.lon[i] + paso, S.lat[i] - paso)]);
+const escSuelo = escalaContinua(S.vs30, VIRIDIS, [150, 760]);
+const capaSuelo = new CapaCanvas({
+  pane: "suelo",
+  dibujar(ctx, t, s) {
+    const vis = [];
+    ctx.globalAlpha = 0.6;
+    for (let i = 0; i < nS; i++) {
+      const [[ax, ay], [bx, by]] = sRect[i];
+      const x0 = ax * t.W - t.x0, y0 = ay * t.W - t.y0, x1 = bx * t.W - t.x0, y1 = by * t.W - t.y0;
+      if (x1 < 0 || y1 < 0 || x0 > s.x || y0 > s.y) continue;
+      vis.push(i);
+      ctx.fillStyle = escSuelo.color(S.vs30[i]);
+      ctx.fillRect(x0, y0, x1 - x0 + 0.5, y1 - y0 + 0.5);
+      if (S.relleno_mar[i]) { ctx.strokeStyle = "#e31a1c"; ctx.strokeRect(x0 + 1, y0 + 1, x1 - x0 - 2, y1 - y0 - 2); }
+    }
+    ctx.globalAlpha = 1;
+    return vis;
+  },
+  buscar(p, t, z, vis) {
+    for (const i of vis) {
+      const [[ax, ay], [bx, by]] = sRect[i];
+      if (p.x >= ax * t.W - t.x0 && p.x <= bx * t.W - t.x0 && p.y >= ay * t.W - t.y0 && p.y <= by * t.W - t.y0) return i;
+    }
+    return -1;
+  },
+});
+function popupSuelo(i) {
+  return tablaPopup("Celda de suelo", [["Vs30 usado", fmt(S.vs30[i], 0) + " m/s"], ["Vs30 USGS", fmt(S.vs30_usgs[i], 0) + " m/s"],
+    ["Perfil E.030", D.cats_suelo.perfil[S.perfil[i]]], ["Relleno / mar", S.relleno_mar[i] ? "sí" : "no"],
+    ["Distrito", D.cats_suelo.distrito[S.distrito[i]] ?? "—"], ["En área de estudio", S.en_area_estudio[i] ? "sí" : "no"]]);
+}
+
+// ---------------- estaciones ----------------
+const ES = D.estaciones;
+const capaEst = L.layerGroup(ES.estacion.map((e, i) => L.circleMarker([ES.lat[i], ES.lon[i]], {
+  radius: 6, color: "#000", weight: 1.5, fillColor: "#ffd400", fillOpacity: 1,
+}).bindTooltip(`${e} · ${ES.nombre[i] ?? ""}`).bindPopup(tablaPopup(`Estación ${e}`, [["Nombre", ES.nombre[i] ?? "—"], ["Red", ES.red[i] ?? "—"],
+  ["Vs30", fmt(ES.vs30[i], 0) + " m/s"], ["Registros", ES.registros[i]], ["PGA máx (g)", fmt(ES.pga_max_g[i], 4)], ["Eventos", ES.eventos[i]]]))));
+
+// ---------------- clic: primero edificios/OSM/suelo, si no el hexágono ----------------
+mapa.on("click", e => {
+  const p = e.containerPoint;
+  const intentos = [[capaOsm, popupOsm], [capaEdif, popupEdif], [capaSuelo, popupSuelo]];
+  for (const [capa, popup] of intentos) {
+    if (!mapa.hasLayer(capa)) continue;
+    const i = capa.buscar(p);
+    if (i >= 0) { L.popup().setLatLng(e.latlng).setContent(popup(i)).openOn(mapa); hexClick = null; return; }
+  }
+  if (hexClick != null) L.popup().setLatLng(e.latlng).setContent(popupHex(hexClick)).openOn(mapa);
+  hexClick = null;
+});
+
+// ---------------- leyendas ----------------
+const ctrlLeyenda = L.control({ position: "bottomright" });
+ctrlLeyenda.onAdd = () => { const d = L.DomUtil.create("div"); d.id = "leyendas"; L.DomEvent.disableClickPropagation(d); return d; };
+ctrlLeyenda.addTo(mapa);
+function htmlLeyenda(titulo, esc, cats) {
+  if (cats) return `<div class="leyenda"><div class="titulo">${titulo}</div>${cats.map(([n, c]) => `<div class="cat"><i style="background:${c}"></i>${n}</div>`).join("")}</div>`;
+  return `<div class="leyenda"><div class="titulo">${titulo}</div><div class="barra" style="background:linear-gradient(90deg,${esc.colores.join(",")})"></div>` +
+    `<div class="extremos"><span>${fmt(esc.min, 3)}</span><span>${esc.log ? "escala log" : ""}</span><span>${fmt(esc.max, 3)}</span></div></div>`;
+}
+function leyendas() {
+  let h = "";
+  if (mapa.hasLayer(capaHex) && hexEscala) h += htmlLeyenda("Hexágonos · " + selMet.selectedOptions[0].text, hexEscala);
+  if (mapa.hasLayer(capaEdif) && edifLeyenda) h += htmlLeyenda("Edificios · " + edifLeyenda.titulo, edifLeyenda.escala, edifLeyenda.cats);
+  if (mapa.hasLayer(capaOsm)) h += htmlLeyenda("OSM · pisos 2.5D − pisos OSM", escOsm);
+  if (mapa.hasLayer(capaSuelo)) h += htmlLeyenda("Suelo · Vs30 (m/s), borde rojo = relleno/mar", escSuelo);
+  document.getElementById("leyendas").innerHTML = h;
+}
+
+// ---------------- interruptores de capas ----------------
+const capas = { "c-distritos": capaDistritos, "c-hex": capaHex, "c-edif": capaEdif, "c-osm": capaOsm, "c-suelo": capaSuelo, "c-est": capaEst };
+for (const [id, capa] of Object.entries(capas)) {
+  const cb = document.getElementById(id);
+  const aplicar = () => { cb.checked ? capa.addTo(mapa) : capa.remove(); leyendas(); };
+  cb.onchange = aplicar; aplicar();
+}
+
+// ---------------- panel de chequeos ----------------
+const G = D.chequeos.globales, M = D.chequeos.muestra, OS = D.chequeos.osm;
+const pct = (n, tot) => `${n.toLocaleString("es-PE")} (${fmt(100 * n / tot, 2)} %)`;
+const fila = (nombre, valor, estado) => `<div class="fila"><span>${nombre}</span><b class="${estado || ""}">${valor}</b></div>`;
+const estadoCero = n => n === 0 ? "ok" : "mal";
+const totalEsc = Object.values(D.chequeos.edificios_en_riesgo_h3);
+document.getElementById("res-osm").innerHTML =
+  fila("Edificios OSM con pisos", OS.n_osm.toLocaleString("es-PE")) +
+  fila("Con pareja en el modelo", `${pct(OS.n, OS.n_osm)}`) + fila("… por huella que lo contiene", OS.por_huella.toLocaleString("es-PE")) +
+  fila("… el modelo usa sus pisos de OSM", OS.con_pisos_osm.toLocaleString("es-PE"), "ok") +
+  `<div class="nota">Error de la estimación 2.5D (la que tienen los edificios sin OSM):</div>` +
+  fila("Error absoluto medio", fmt(OS.mae) + " pisos") +
+  fila("Sesgo (modelo − OSM)", fmt(OS.sesgo) + " pisos", Math.abs(OS.sesgo) < 0.5 ? "ok" : "aviso") +
+  fila("Coinciden exacto", fmt(OS.pct_exacto, 1) + " %") + fila("Dentro de ±1 piso", fmt(OS.pct_pm1, 1) + " %") + fila("Correlación", fmt(OS.corr, 3)) +
+  `<table class="tabla-grupos"><tr><th>OSM</th><th>n</th><th>OSM</th><th>2.5D</th><th>altura</th><th>sesgo</th><th>±1</th></tr>` +
+  OS.por_grupo.map(g => `<tr><td>${g.grupo}</td><td>${g.con_par.toLocaleString("es-PE")}</td><td>${fmt(g.niveles_medio, 1)}</td>` +
+    `<td>${fmt(g.pisos_medio, 1)}</td><td>${fmt(g.altura_media, 0)} m</td>` +
+    `<td class="${Math.abs(g.sesgo) <= 1 ? "ok" : "mal"}">${g.sesgo > 0 ? "+" : ""}${fmt(g.sesgo, 1)}</td><td>${fmt(g.pct_pm1, 0)} %</td></tr>`).join("") +
+  `</table><div class="nota">Pisos medios según OSM y según la estimación 2.5D, altura 2.5D media, sesgo (2.5D − OSM) y % dentro de ±1 piso, por tamaño real del edificio. Sobre ~30 m el 2.5D se satura: por eso se usan los pisos de OSM donde existen.</div>`;
+document.getElementById("peores").innerHTML = OS.peores.map((p, k) =>
+  `<div class="fila enlace" data-k="${k}"><span>OSM ${fmt(p.niveles, 0)} → 2.5D ${p.pisos} → final ${p.pisos_final}</span><b class="mal">${p.pisos - p.niveles > 0 ? "+" : ""}${fmt(p.pisos - p.niveles, 0)}</b></div>`).join("");
+document.querySelectorAll("#peores .enlace").forEach(el => el.onclick = () => {
+  const p = OS.peores[+el.dataset.k];
+  if (!mapa.hasLayer(capaOsm)) document.getElementById("c-osm").click();
+  mapa.setView([p.lat, p.lon], 19);
+  const i = O.osm_id.indexOf(p.osm_id);
+  if (i >= 0) L.popup().setLatLng([p.lat, p.lon]).setContent(popupOsm(i)).openOn(mapa);
+});
+document.getElementById("chequeos").innerHTML =
+  `<div class="nota">Sobre los ${G.total.toLocaleString("es-PE")} edificios de silver.edificios (en Databricks):</div>` +
+  fila("h3_r8 ≠ r8 calculado directo de lon/lat", pct(G.h3_r8_distinto, G.total), "aviso") +
+  `<div class="nota">Es esperado: h3_r8 es el padre del r9 y en H3 los hijos no caen exactamente dentro del padre. Lo que importa es que padre(h3_id) = h3_r8 (siguiente fila).</div>` +
+  fila("h3_id ≠ H3 r9 recalculado", pct(G.h3_r9_distinto, G.total), estadoCero(G.h3_r9_distinto)) +
+  fila("h3_id no es resolución 9", pct(G.h3_id_no_r9, G.total), estadoCero(G.h3_id_no_r9)) +
+  fila("padre(h3_id) ≠ h3_r8", pct(G.padre_distinto, G.total), estadoCero(G.padre_distinto)) +
+  fila("Sin distrito", pct(G.sin_distrito, G.total), estadoCero(G.sin_distrito)) +
+  fila("Sin pisos / sin Vs30", `${G.sin_pisos} / ${G.sin_vs30}`, estadoCero(G.sin_pisos + G.sin_vs30)) +
+  fila("Altura imputada", pct(G.altura_imputada, G.total), "aviso") +
+  fila("Altura/piso fuera de 1.8–6 m", pct(G.altura_por_piso_rara, G.total), G.altura_por_piso_rara / G.total < 0.01 ? "ok" : "aviso") +
+  `<div class="nota">Todos son de 1 piso con altura medida &lt; 1.8 m (la altura 2.5D de Open Buildings subestima construcciones bajas).</div>` +
+  fila("Altura p1 / p50 / p99", (G.altura_p01_p50_p99 || []).map(v => fmt(v, 1)).join(" / ") + " m") +
+  fila("Altura máx / pisos máx", `${fmt(G.altura_max, 1)} m / ${G.pisos_max}`) +
+  fila("Lon", `${fmt(G.lon_min, 3)} … ${fmt(G.lon_max, 3)}`) + fila("Lat", `${fmt(G.lat_min, 3)} … ${fmt(G.lat_max, 3)}`) +
+  `<div class="nota" style="margin-top:8px">Hexágonos y gold:</div>` +
+  fila("Hexágonos con edificios", D.chequeos.hex_con_edificios.toLocaleString("es-PE")) +
+  fila("Hexágonos de riesgo_h3 sin edificios", D.chequeos.hex_sin_edificios, estadoCero(D.chequeos.hex_sin_edificios)) +
+  fila("Edificios en riesgo_h3 (por escenario)", totalEsc.every(v => v === G.total) ? "= total" : `${Math.min(...totalEsc).toLocaleString("es-PE")} … ${Math.max(...totalEsc).toLocaleString("es-PE")}`,
+    totalEsc.every(v => v === G.total) ? "ok" : "aviso") +
+  `<div class="nota" style="margin-top:8px">Sobre la muestra del mapa (${M.muestra.toLocaleString("es-PE")}):</div>` +
+  fila("Centroide fuera de su distrito", pct(M.distrito_distinto, M.muestra), M.distrito_distinto / M.muestra < 0.005 ? "ok" : "aviso") +
+  fila("Punto a > 5 m del centroide de la huella", pct(M.centroide_lejos_5m, M.muestra), estadoCero(M.centroide_lejos_5m)) +
+  fila("Edificios con alguna alerta", pct(nAlertas, nB), "aviso") +
+  `<div class="nota">Marque «Solo edificios con alerta» o coloree por «Alertas» para verlos en el mapa.</div>`;
+
+prepararColorEdif();
+pintarHex();
+mapa.fitBounds(capaDistritos.getBounds());
+</script>
+</body>
+</html>
