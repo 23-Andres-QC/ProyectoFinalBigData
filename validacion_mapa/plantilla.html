@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Validación espacial Lima</title>
+<title>Validación espacial 6 distritos</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
@@ -57,13 +57,13 @@
 <body>
 <div id="app">
   <aside id="panel">
-    <h1>Validación espacial · Lima y Callao</h1>
+    <h1>Validación espacial · Barranco, Miraflores, San Isidro, San Borja, Surco y Surquillo</h1>
     <div class="sub" id="generado"></div>
 
     <h2>Capas</h2>
     <label class="capa"><input type="checkbox" id="c-distritos" checked> Distritos (silver.distritos)</label>
     <label class="capa"><input type="checkbox" id="c-hex" checked> Hexágonos H3 r8</label>
-    <label class="capa"><input type="checkbox" id="c-edif" checked> Edificios (muestra con huella)</label>
+    <label class="capa"><input type="checkbox" id="c-edif" checked> Edificios (todos, con huella)</label>
     <label class="capa"><input type="checkbox" id="c-osm"> Validación de pisos con OSM</label>
     <label class="capa"><input type="checkbox" id="c-suelo"> Grilla de suelo (silver.suelo)</label>
     <label class="capa"><input type="checkbox" id="c-est" checked> Estaciones CISMID</label>
@@ -153,7 +153,7 @@ function tablaPopup(titulo, filas) {
 }
 
 // ---------------- mapa base ----------------
-const mapa = L.map("mapa", { preferCanvas: false, zoomControl: true }).setView([-12.06, -77.03], 11);
+const mapa = L.map("mapa", { preferCanvas: false, zoomControl: true }).setView([-12.11, -76.98], 13);
 const bases = {
   "Satélite (Esri)": L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     { maxZoom: 20, maxNativeZoom: 19, attribution: "Imágenes © Esri, Maxar, Earthstar Geographics" }),
@@ -418,8 +418,7 @@ function popupEdif(i) {
 document.getElementById("edif-color").onchange = () => { prepararColorEdif(); capaEdif.dibujar(); leyendas(); };
 soloMalos.onchange = () => capaEdif.dibujar();
 document.getElementById("nota-edif").innerHTML =
-  `${nB.toLocaleString("es-PE")} edificios de ${D.chequeos.globales.total.toLocaleString("es-PE")}: ${D.parametros.por_distrito} al azar por distrito, ` +
-  `todos los de ${D.parametros.completos.join(", ")}, todos los de ≥ ${D.parametros.pisos_altos} pisos y todos los que OSM registra con ≥ 5 pisos. ` +
+  `${nB.toLocaleString("es-PE")} edificios: todos los de los 6 distritos de estudio. ` +
   `Desde zoom 15 se dibuja la huella real. Use un fondo satelital (arriba a la derecha) para comparar.`;
 
 // ---------------- validación OSM ----------------
@@ -596,7 +595,7 @@ document.getElementById("chequeos").innerHTML =
   fila("Hexágonos de riesgo_h3 sin edificios", D.chequeos.hex_sin_edificios, estadoCero(D.chequeos.hex_sin_edificios)) +
   fila("Edificios en riesgo_h3 (por escenario)", totalEsc.every(v => v === G.total) ? "= total" : `${Math.min(...totalEsc).toLocaleString("es-PE")} … ${Math.max(...totalEsc).toLocaleString("es-PE")}`,
     totalEsc.every(v => v === G.total) ? "ok" : "aviso") +
-  `<div class="nota" style="margin-top:8px">Sobre la muestra del mapa (${M.muestra.toLocaleString("es-PE")}):</div>` +
+  `<div class="nota" style="margin-top:8px">Sobre los edificios del mapa (${M.muestra.toLocaleString("es-PE")}):</div>` +
   fila("Centroide fuera de su distrito", pct(M.distrito_distinto, M.muestra), M.distrito_distinto / M.muestra < 0.005 ? "ok" : "aviso") +
   fila("Punto a > 5 m del centroide de la huella", pct(M.centroide_lejos_5m, M.muestra), estadoCero(M.centroide_lejos_5m)) +
   fila("Edificios con alguna alerta", pct(nAlertas, nB), "aviso") +

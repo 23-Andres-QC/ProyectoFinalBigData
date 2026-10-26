@@ -1,7 +1,7 @@
-"""Genera mapa_validacion.html: mapa de Lima y Callao con los datos del lakehouse para revisarlos a ojo.
+"""Genera mapa_validacion.html: mapa de los 6 distritos de estudio con los datos del lakehouse para revisarlos a ojo.
 
 Capas: distritos (silver.distritos), hexágonos H3 r8 (agregados de silver.edificios + gold.riesgo_h3 + gold.sa_roca_h3),
-muestra de edificios con su huella (silver.edificios), validación de pisos con OSM, grilla de suelo y estaciones CISMID.
+todos los edificios con su huella (silver.edificios), validación de pisos con OSM, grilla de suelo y estaciones CISMID.
 Además corre chequeos (H3 recalculado, distrito por point-in-polygon, centroide vs. huella) y los muestra en el mapa.
 
 Uso (kernel databricks-connect, Python 3.12):  python validacion_mapa/generar_mapa.py   [--solo-html]
@@ -24,9 +24,6 @@ C = "grupo06proyectofinal"
 CARPETA = Path(__file__).resolve().parent
 SALIDA = CARPETA / "mapa_validacion.html"
 
-POR_DISTRITO = 700                                        # edificios al azar por distrito
-DISTRITOS_COMPLETOS = ["MIRAFLORES", "SAN ISIDRO", "BARRANCO"]   # todos sus edificios (para comparar con el satélite)
-PISOS_ALTOS = 8                                           # además, todos los edificios con >= estos pisos
 CACHE = CARPETA / "datos_cache.json"                      # datos ya extraídos (para rehacer solo el HTML)
 ARCHIVO_KEY = CARPETA / "google_maps_key.txt"             # key de Google Map Tiles API (no se sube a git)
 
@@ -82,7 +79,7 @@ def categorias(df, cols):
     return dic
 
 
-# ---------------- Chequeos globales sobre los 1.9 M edificios ----------------
+# ---------------- Chequeos globales sobre todos los edificios ----------------
 r = spark.sql(f"""
 SELECT count(*) AS total,
        count_if(h3_r8 IS NULL) AS sin_h3_r8,
@@ -108,7 +105,8 @@ print("Chequeos globales:", chequeos_globales)
 dist = tabla(f"""
 SELECT d.ubigeo, d.distrito, d.provincia, d.area_km2, d.geometria_fuente, d.geometry_wkt, e.edificios
 FROM {C}.silver.distritos d
-LEFT JOIN (SELECT distrito, count(*) AS edificios FROM {E} GROUP BY distrito) e USING (distrito)""")
+LEFT JOIN (SELECT distrito, count(*) AS edificios FROM {E} GROUP BY distrito) e USING (distrito)
+WHERE d.en_estudio""")
 geoms_dist = shapely.from_wkt(dist.geometry_wkt.to_numpy())
 features_dist = []
 for fila, g in zip(dist.itertuples(), geoms_dist):
@@ -179,15 +177,12 @@ FROM (SELECT DISTINCT osm_id, lon, lat, niveles FROM {C}.bronze.osm_niveles WHER
 LEFT JOIN mejor m USING (osm_id)""").createOrReplaceTempView("pares_osm")
 pares_osm = tabla("SELECT * FROM pares_osm")
 
-# ---------------- Muestra de edificios ----------------
-lista_completos = ", ".join(f"'{d}'" for d in DISTRITOS_COMPLETOS)
-ids_osm_altos = ", ".join(f"'{i}'" for i in pares_osm.loc[pares_osm.niveles >= 5, "id"].dropna().unique())
+# ---------------- Edificios (todos los del área de estudio) ----------------
 edif = tabla(f"""
-WITH m AS (SELECT *, row_number() OVER (PARTITION BY distrito ORDER BY rand(7)) AS rn FROM {E})
 SELECT id, distrito, h3_r8, lon, lat, area_m2, confianza, altura_m, altura_metodo, pisos, pisos_metodo, Tb, Tb_TP,
        vs30, tipo_suelo, perfil_fuente, zona_cismid, con_microzonificacion, pisos_25d, niveles_osm, altura_max_m, geometry_wkt
-FROM m WHERE rn <= {POR_DISTRITO} OR pisos >= {PISOS_ALTOS} OR distrito IN ({lista_completos}) OR id IN ({ids_osm_altos})""")
-print(f"Edificios en la muestra: {len(edif):,}")
+FROM {E}""")
+print(f"Edificios: {len(edif):,}")
 
 # point-in-polygon local: ¿el centroide cae en el distrito asignado?
 puntos = shapely.points(edif.lon.to_numpy(), edif.lat.to_numpy())
@@ -255,7 +250,7 @@ print("Validación OSM:", {k: v for k, v in resumen_osm.items() if k not in ("po
 print(pd.DataFrame(por_grupo).to_string(index=False))
 
 # ---------------- Suelo y estaciones ----------------
-suelo = tabla(f"SELECT lon, lat, vs30, vs30_usgs, relleno_mar, perfil, distrito, en_area_estudio FROM {C}.silver.suelo")
+suelo = tabla(f"SELECT lon, lat, vs30, vs30_usgs, relleno_mar, perfil, distrito, en_area_estudio FROM {C}.silver.suelo WHERE en_area_estudio")
 paso = float(np.min(np.diff(np.sort(suelo.lon.unique()))))
 cats_suelo = categorias(suelo, ["perfil", "distrito"])
 suelo_out = columnas(suelo, {"lon": 6, "lat": 6, "vs30": 0, "vs30_usgs": 0})
@@ -271,7 +266,6 @@ datos = {
     "chequeos": {"globales": chequeos_globales, "muestra": chequeos_muestra, "osm": resumen_osm,
                  "hex_sin_edificios": len(hex_sin_edificios), "hex_con_edificios": len(hex_base),
                  "edificios_en_riesgo_h3": {k: int(v) for k, v in edif_riesgo.items()}},
-    "parametros": {"por_distrito": POR_DISTRITO, "completos": DISTRITOS_COMPLETOS, "pisos_altos": PISOS_ALTOS},
     "distritos": {"type": "FeatureCollection", "features": features_dist},
     "hex": hex_out, "hex_esc": por_esc,
     "escenarios": columnas(escenarios, {"pga_roca_escenario_g": 3}),
