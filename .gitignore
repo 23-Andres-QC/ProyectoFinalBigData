@@ -1,5 +1,6 @@
-# Datos (se regeneran con descarga.ipynb y lakehouse_bronze_silver.ipynb)
+# Datos (se regeneran con descarga.ipynb)
 raw/
+raw.zip
 lakehouse/
 tmp_spark/
 spark-warehouse/
@@ -10,3 +11,6 @@ derby.log
 __pycache__/
 .ipynb_checkpoints/
 *.pyc
+
+# Informe (repositorio aparte)
+Final_BigData_Informe/

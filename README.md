@@ -17,8 +17,7 @@ PC: raw/ (~41 GB, no se sube) ──Databricks Connect──► bronze ──►
 |---|---|
 | `BigData_Grupo06_ProyectoFinal.ipynb` | **Notebook principal**: todo el pipeline en Databricks (partes 0 a 8) |
 | `descarga.ipynb` | Descarga de las fuentes a `raw/` con sus tiempos |
-| `Grupo06/lakehouse_bronze_silver.ipynb` | Versión anterior (lakehouse local con PySpark + Delta) |
-| `Grupo06/Informe_Grupo06.pdf`, `Grupo06/PPT Grupo 06.pdf` | Informe y presentación |
+| `validacion_mapa/` | Mapa de validación (script, plantilla y `.gitignore`; el HTML generado no se sube) |
 
 ## Partes del notebook
 
