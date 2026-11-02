@@ -92,7 +92,7 @@
     <div class="nota" id="nota-edif"></div>
 
     <h2>Validación de alturas con OSM (dato real)</h2>
-    <div class="nota">Cada edificio de OpenStreetMap con <code>building:levels</code> se compara con la <b>estimación 2.5D calibrada</b> (<code>pisos_25d</code>: altura mediana 2016–2023 → pisos) del edificio cuya huella lo contiene (o, si no, el de centroide a &lt; 8 m). Donde OSM existe y el 2.5D no lo contradice, el modelo ya usa los pisos de OSM (<code>pisos_metodo = osm</code>).</div>
+    <div class="nota">Cada edificio de OpenStreetMap con <code>building:levels</code> se compara con la <b>estimación 2.5D</b> (<code>pisos_25d</code>: altura mediana 2016–2023 → pisos con el modelo híbrido de 7.9) del edificio cuya huella lo contiene (o, si no, el de centroide a &lt; 8 m). Donde OSM existe y el 2.5D no lo contradice, el modelo ya usa los pisos de OSM (<code>pisos_metodo = osm</code>).</div>
     <div id="res-osm"></div>
     <div class="nota">En el mapa (capa «Validación de pisos con OSM»): color = pisos 2.5D − pisos de OSM (azul: el 2.5D se queda corto; rojo: se pasa; gris: sin pareja).</div>
     <h2>Edificios altos peor estimados (OSM ≥ 10 pisos)</h2>
@@ -154,7 +154,15 @@ function tablaPopup(titulo, filas) {
 
 // ---------------- mapa base ----------------
 const mapa = L.map("mapa", { preferCanvas: false, zoomControl: true }).setView([-12.11, -76.98], 13);
+const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services";
 const bases = {
+  // fondo por defecto: la imagen de Esri/Maxar calza con las huellas; la de Google en Lima está corrida unos metros
+  "Satélite + calles (Esri)": L.layerGroup([
+    L.tileLayer(`${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`,
+      { maxZoom: 20, maxNativeZoom: 19, attribution: "Imágenes © Esri, Maxar, Earthstar Geographics" }),
+    L.tileLayer(`${ESRI}/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}`, { maxZoom: 20, maxNativeZoom: 19, opacity: 0.8 }),
+    L.tileLayer(`${ESRI}/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}`, { maxZoom: 20, maxNativeZoom: 19 }),
+  ]),
   "Satélite (Esri)": L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     { maxZoom: 20, maxNativeZoom: 19, attribution: "Imágenes © Esri, Maxar, Earthstar Geographics" }),
   "OpenStreetMap": L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",
@@ -164,6 +172,7 @@ const bases = {
 };
 const GOOGLE_KEY = /*__GOOGLE_KEY__*/"";
 const ctrlBases = L.control.layers(bases, null, { position: "topright" }).addTo(mapa);
+bases["Satélite + calles (Esri)"].addTo(mapa);
 if (GOOGLE_KEY) {
   // Google Map Tiles API: una sesión por tipo de mapa; las capas se agregan cuando la sesión responde
   const tipos = [["Google · mapa", { mapType: "roadmap" }], ["Google · satélite", { mapType: "satellite" }],
@@ -177,15 +186,8 @@ if (GOOGLE_KEY) {
       const capa = L.tileLayer(`https://tile.googleapis.com/v1/2dtiles/{z}/{x}/{y}?session=${j.session}&key=${GOOGLE_KEY}`,
         { maxZoom: 22, maxNativeZoom: 21, attribution: "Datos del mapa © Google" });
       ctrlBases.addBaseLayer(capa, nombre);
-      return [nombre, capa];
-    }).catch(err => { console.warn("Google Map Tiles no disponible:", nombre, err); return null; })
-  )).then(capas => {
-    const hib = capas.find(c => c && c[0] === "Google · híbrido") || capas.find(c => c);
-    if (hib) { Object.values(bases).forEach(b => b.remove()); hib[1].addTo(mapa); }
-    else bases["Claro (Carto)"].addTo(mapa);
-  });
-} else {
-  bases["Claro (Carto)"].addTo(mapa);
+    }).catch(err => console.warn("Google Map Tiles no disponible:", nombre, err))
+  ));
 }
 L.control.scale({ imperial: false }).addTo(mapa);
 [["suelo", 330], ["hex", 380], ["distritos", 420], ["edif", 440], ["osm", 450]].forEach(([n, z]) => {
@@ -419,7 +421,7 @@ document.getElementById("edif-color").onchange = () => { prepararColorEdif(); ca
 soloMalos.onchange = () => capaEdif.dibujar();
 document.getElementById("nota-edif").innerHTML =
   `${nB.toLocaleString("es-PE")} edificios: todos los de los 6 distritos de estudio. ` +
-  `Desde zoom 15 se dibuja la huella real. Use un fondo satelital (arriba a la derecha) para comparar.`;
+  `Desde zoom 15 se dibuja la huella real. El fondo Esri calza con las huellas; el satélite de Google en Lima está corrido unos 4–6 m al este y los techos de los edificios altos salen inclinados por el ángulo de la foto.`;
 
 // ---------------- validación OSM ----------------
 const O = D.osm, nO = O.osm_id.length;
@@ -565,7 +567,7 @@ document.getElementById("res-osm").innerHTML =
   OS.por_grupo.map(g => `<tr><td>${g.grupo}</td><td>${g.con_par.toLocaleString("es-PE")}</td><td>${fmt(g.niveles_medio, 1)}</td>` +
     `<td>${fmt(g.pisos_medio, 1)}</td><td>${fmt(g.altura_media, 0)} m</td>` +
     `<td class="${Math.abs(g.sesgo) <= 1 ? "ok" : "mal"}">${g.sesgo > 0 ? "+" : ""}${fmt(g.sesgo, 1)}</td><td>${fmt(g.pct_pm1, 0)} %</td></tr>`).join("") +
-  `</table><div class="nota">Pisos medios según OSM y según la estimación 2.5D, altura 2.5D media, sesgo (2.5D − OSM) y % dentro de ±1 piso, por tamaño real del edificio. La estimación usa la altura mediana de 2016–2023 y la calibración <code>pisos = (altura + 0.31) / 3.32</code> (sección 7.9); en torres altas sigue quedándose corta, por eso se usan los pisos de OSM donde existen.</div>`;
+  `</table><div class="nota">Pisos medios según OSM y según la estimación 2.5D, altura 2.5D media, sesgo (2.5D − OSM) y % dentro de ±1 piso, por tamaño real del edificio. La estimación usa la altura mediana de 2016–2023 y el modelo híbrido de la sección 7.9 (gradient boosting hasta 40 m, <code>pisos = (altura + 0.31) / 3.32</code> arriba). El modelo se entrenó con estos edificios, así que esta tabla sale optimista; con validación cruzada por bloques el error medio es 1.54 pisos y el 71 % queda dentro de ±1. En torres altas sigue quedándose corta, por eso se usan los pisos de OSM donde existen.</div>`;
 document.getElementById("peores").innerHTML = OS.peores.map((p, k) =>
   `<div class="fila enlace" data-k="${k}"><span>OSM ${fmt(p.niveles, 0)} → 2.5D ${p.pisos} → final ${p.pisos_final}</span><b class="mal">${p.pisos - p.niveles > 0 ? "+" : ""}${fmt(p.pisos - p.niveles, 0)}</b></div>`).join("");
 document.querySelectorAll("#peores .enlace").forEach(el => el.onclick = () => {
