@@ -92,7 +92,7 @@
     <div class="nota" id="nota-edif"></div>
 
     <h2>Validación de alturas con OSM (dato real)</h2>
-    <div class="nota">Cada edificio de OpenStreetMap con <code>building:levels</code> se compara con la <b>estimación 2.5D</b> (<code>pisos_25d</code>) del edificio cuya huella lo contiene (o, si no, el de centroide a &lt; 8 m). Donde OSM existe y el 2.5D no lo contradice, el modelo ya usa los pisos de OSM (<code>pisos_metodo = osm</code>).</div>
+    <div class="nota">Cada edificio de OpenStreetMap con <code>building:levels</code> se compara con la <b>estimación 2.5D calibrada</b> (<code>pisos_25d</code>: altura mediana 2016–2023 → pisos) del edificio cuya huella lo contiene (o, si no, el de centroide a &lt; 8 m). Donde OSM existe y el 2.5D no lo contradice, el modelo ya usa los pisos de OSM (<code>pisos_metodo = osm</code>).</div>
     <div id="res-osm"></div>
     <div class="nota">En el mapa (capa «Validación de pisos con OSM»): color = pisos 2.5D − pisos de OSM (azul: el 2.5D se queda corto; rojo: se pasa; gris: sin pareja).</div>
     <h2>Edificios altos peor estimados (OSM ≥ 10 pisos)</h2>
@@ -459,7 +459,7 @@ function popupOsm(i) {
     ["Pisos según OSM (real)", fmt(O.niveles[i], 1)], ["Pisos estimados 2.5D", par ? O.pisos[i] : "—"],
     ["Pisos finales del modelo", par ? `${O.pisos_final[i]} (${D.cats_osm.pisos_metodo[O.pisos_metodo[i]]})` : "—"],
     ["Diferencia", par ? `<b class="${Math.abs(dif) <= 1 ? "ok" : "mal"}">${fmt(dif, 1)}</b>` : "—"],
-    ["Altura 2.5D del modelo", fmt(O.altura_m[i], 1) + " m"], ["Altura esperada (OSM × 3 m)", fmt(O.niveles[i] * 3, 0) + " m"],
+    ["Altura 2.5D del modelo", fmt(O.altura_m[i], 1) + " m"], ["Altura esperada (OSM × 3.32 m − 0.31 m)", fmt(O.niveles[i] * 3.32 - 0.31, 0) + " m"],
     ["Emparejado por", D.cats_osm.pareja[O.pareja[i]]], ["Edificio del modelo", O.id[i] ?? "—"],
     ["Distancia al centroide", fmt(O.dist_m[i], 1) + " m"],
     ["Método altura", par ? D.cats_osm.altura_metodo[O.altura_metodo[i]] : "—"],
@@ -565,7 +565,7 @@ document.getElementById("res-osm").innerHTML =
   OS.por_grupo.map(g => `<tr><td>${g.grupo}</td><td>${g.con_par.toLocaleString("es-PE")}</td><td>${fmt(g.niveles_medio, 1)}</td>` +
     `<td>${fmt(g.pisos_medio, 1)}</td><td>${fmt(g.altura_media, 0)} m</td>` +
     `<td class="${Math.abs(g.sesgo) <= 1 ? "ok" : "mal"}">${g.sesgo > 0 ? "+" : ""}${fmt(g.sesgo, 1)}</td><td>${fmt(g.pct_pm1, 0)} %</td></tr>`).join("") +
-  `</table><div class="nota">Pisos medios según OSM y según la estimación 2.5D, altura 2.5D media, sesgo (2.5D − OSM) y % dentro de ±1 piso, por tamaño real del edificio. Sobre ~30 m el 2.5D se satura: por eso se usan los pisos de OSM donde existen.</div>`;
+  `</table><div class="nota">Pisos medios según OSM y según la estimación 2.5D, altura 2.5D media, sesgo (2.5D − OSM) y % dentro de ±1 piso, por tamaño real del edificio. La estimación usa la altura mediana de 2016–2023 y la calibración <code>pisos = (altura + 0.31) / 3.32</code> (sección 7.9); en torres altas sigue quedándose corta, por eso se usan los pisos de OSM donde existen.</div>`;
 document.getElementById("peores").innerHTML = OS.peores.map((p, k) =>
   `<div class="fila enlace" data-k="${k}"><span>OSM ${fmt(p.niveles, 0)} → 2.5D ${p.pisos} → final ${p.pisos_final}</span><b class="mal">${p.pisos - p.niveles > 0 ? "+" : ""}${fmt(p.pisos - p.niveles, 0)}</b></div>`).join("");
 document.querySelectorAll("#peores .enlace").forEach(el => el.onclick = () => {
