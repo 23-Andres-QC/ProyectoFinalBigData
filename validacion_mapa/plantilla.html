@@ -61,11 +61,11 @@
     <div class="sub" id="generado"></div>
 
     <h2>Capas</h2>
-    <label class="capa"><input type="checkbox" id="c-distritos" checked> Distritos (silver.distritos)</label>
+    <label class="capa"><input type="checkbox" id="c-distritos" checked> Distritos (silver_distritos)</label>
     <label class="capa"><input type="checkbox" id="c-hex" checked> Hexágonos H3 r8</label>
     <label class="capa"><input type="checkbox" id="c-edif" checked> Edificios (todos, con huella)</label>
     <label class="capa"><input type="checkbox" id="c-osm"> Validación de pisos con OSM</label>
-    <label class="capa"><input type="checkbox" id="c-suelo"> Grilla de suelo (silver.suelo)</label>
+    <label class="capa"><input type="checkbox" id="c-suelo"> Grilla de suelo (silver_suelo)</label>
     <label class="capa"><input type="checkbox" id="c-est" checked> Estaciones CISMID</label>
     <label class="capa"><input type="checkbox" id="c-malos"> Solo edificios con alerta</label>
 
@@ -108,8 +108,8 @@
 <script>
 const D = /*__DATOS__*/null;
 if (!D) {
-  document.body.innerHTML = '<p style="padding:24px;font-size:15px">Esta es solo la plantilla, sin datos. Abra <b>mapa_validacion.html</b> ' +
-    '(se genera con <code>python validacion_mapa/generar_mapa.py</code>).</p>';
+  document.body.innerHTML = '<p style="padding:24px;font-size:15px">Esta es solo la plantilla, sin datos. Abra la app web <b>mapa-validacion</b> ' +
+    'en Databricks, o <b>mapa_validacion.html</b> (se genera con <code>python validacion_mapa/generar_mapa.py</code>).</p>';
   throw new Error("plantilla sin datos");
 }
 
@@ -578,7 +578,7 @@ document.querySelectorAll("#peores .enlace").forEach(el => el.onclick = () => {
   if (i >= 0) L.popup().setLatLng([p.lat, p.lon]).setContent(popupOsm(i)).openOn(mapa);
 });
 document.getElementById("chequeos").innerHTML =
-  `<div class="nota">Sobre los ${G.total.toLocaleString("es-PE")} edificios de silver.edificios (en Databricks):</div>` +
+  `<div class="nota">Sobre los ${G.total.toLocaleString("es-PE")} edificios de silver_edificios (en Databricks):</div>` +
   fila("h3_r8 ≠ r8 calculado directo de lon/lat", pct(G.h3_r8_distinto, G.total), "aviso") +
   `<div class="nota">Es esperado: h3_r8 es el padre del r9 y en H3 los hijos no caen exactamente dentro del padre. Lo que importa es que padre(h3_id) = h3_r8 (siguiente fila).</div>` +
   fila("h3_id ≠ H3 r9 recalculado", pct(G.h3_r9_distinto, G.total), estadoCero(G.h3_r9_distinto)) +
