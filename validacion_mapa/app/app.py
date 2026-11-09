@@ -1,9 +1,5 @@
-"""App web del mapa de validación (Databricks Apps).
-
-Lee el JSON que deja el notebook 12_mapa_validacion en el Volume web, lo inserta en plantilla.html y sirve la página.
-Cada REVISAR_CADA_S segundos revisa si el job escribió datos nuevos; si cambiaron, rehace la página.
-La app entra a Databricks con su service principal (credenciales que pone Databricks Apps en el entorno).
-"""
+# App web del mapa de validación: inserta en plantilla.html el JSON del Volume web y sirve la página.
+# Revisa cada cierto tiempo si el job escribió datos nuevos; entra a Databricks con su service principal.
 import gzip
 import hashlib
 import html
@@ -32,8 +28,8 @@ estado = {"modificado": None, "html": None, "gzip": None, "etag": None, "revisad
 candado = threading.Lock()
 
 
+# Recarga los datos del Volume si cambiaron, con una revisión cada REVISAR_CADA_S segundos como máximo.
 def actualizar():
-    """Recarga los datos del Volume si cambiaron (como mucho una revisión cada REVISAR_CADA_S segundos)."""
     with candado:
         if estado["html"] is not None and time.time() - estado["revisado"] < REVISAR_CADA_S:
             return
@@ -46,7 +42,7 @@ def actualizar():
         except NotFound:
             estado.update(html=None, gzip=None, error="Todavía no existe el archivo de datos.")
             return
-        except Exception as e:  # se mantiene la página anterior, si la hay
+        except Exception as e:
             estado["error"] = f"{type(e).__name__}: {e}"
             return
         pagina = PLANTILLA.replace("/*__DATOS__*/null", datos.replace("</", "<\\/")).encode("utf-8")
@@ -55,6 +51,7 @@ def actualizar():
                       cargado=time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()))
 
 
+# Sirve la página comprimida si el navegador lo admite, o un aviso si aún no hay datos.
 @app.get("/")
 def mapa():
     actualizar()
@@ -71,6 +68,7 @@ def mapa():
     return respuesta
 
 
+# Muestra de qué archivo y fecha vienen los datos, su tamaño y el último error.
 @app.get("/salud")
 def salud():
     actualizar()

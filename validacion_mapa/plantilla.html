@@ -9,7 +9,7 @@
 <style>
   :root {
     --fondo: #f6f6f4; --panel: #ffffff; --texto: #1d1d1b; --suave: #6b6b66; --borde: #deded9;
-    --ok: #1a7f4b; --mal: #b42318; --aviso: #a15c00; --acento: #2457c5;
+    --ok: #1a7f4b; --mal: #b42318; --acento: #2457c5;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--fondo); color: var(--texto);
@@ -17,16 +17,12 @@
   #app { display: flex; height: 100%; }
   #panel { width: 340px; flex: none; overflow-y: auto; background: var(--panel); border-right: 1px solid var(--borde); padding: 14px 16px 24px; }
   #mapa { flex: 1; }
-  h1 { font-size: 16px; margin: 0 0 2px; }
   h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--suave); margin: 18px 0 6px; }
-  .sub { color: var(--suave); font-size: 12px; }
+  #panel h2:first-child { margin-top: 0; }
   label.capa { display: flex; align-items: center; gap: 6px; margin: 4px 0; cursor: pointer; }
   select, input[type=range] { width: 100%; margin: 3px 0 6px; }
   select { padding: 4px; border: 1px solid var(--borde); border-radius: 4px; background: #fff; font: inherit; }
-  .fila { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; border-bottom: 1px dotted var(--borde); }
-  .fila b { font-variant-numeric: tabular-nums; }
-  .ok { color: var(--ok); } .mal { color: var(--mal); } .aviso { color: var(--aviso); }
-  .nota { color: var(--suave); font-size: 11.5px; margin: 4px 0; }
+  .ok { color: var(--ok); } .mal { color: var(--mal); }
   .leyenda { background: rgba(255,255,255,.95); padding: 8px 10px; border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,.25); min-width: 190px; font-size: 12px; }
   .leyenda .titulo { font-weight: 600; margin-bottom: 4px; }
   .leyenda .barra { height: 10px; border-radius: 2px; }
@@ -42,12 +38,6 @@
     text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff; }
   .etq-distrito::before { display: none; }
   .sin-etiquetas .etq-distrito { display: none; }
-  .tabla-grupos { width: 100%; border-collapse: collapse; margin-top: 8px; font-variant-numeric: tabular-nums; font-size: 12px; }
-  .tabla-grupos th { text-align: right; color: var(--suave); font-weight: 500; border-bottom: 1px solid var(--borde); padding: 2px 3px; }
-  .tabla-grupos td { text-align: right; padding: 2px 3px; border-bottom: 1px dotted var(--borde); }
-  .tabla-grupos th:first-child, .tabla-grupos td:first-child { text-align: left; }
-  .enlace { cursor: pointer; }
-  .enlace:hover { background: #eef2fb; }
   @media (max-width: 760px) {
     #app { flex-direction: column; }
     #panel { width: 100%; height: 42%; border-right: none; border-bottom: 1px solid var(--borde); }
@@ -57,9 +47,6 @@
 <body>
 <div id="app">
   <aside id="panel">
-    <h1>Validación espacial · Barranco, Miraflores, San Isidro, San Borja, Surco y Surquillo</h1>
-    <div class="sub" id="generado"></div>
-
     <h2>Capas</h2>
     <label class="capa"><input type="checkbox" id="c-distritos" checked> Distritos (silver_distritos)</label>
     <label class="capa"><input type="checkbox" id="c-hex" checked> Hexágonos H3 r8</label>
@@ -89,18 +76,6 @@
       <option value="error_osm">Error 2.5D vs. OSM (solo con dato OSM)</option>
       <option value="alerta">Alertas de validación</option>
     </select></label>
-    <div class="nota" id="nota-edif"></div>
-
-    <h2>Validación de alturas con OSM (dato real)</h2>
-    <div class="nota">Cada edificio de OpenStreetMap con <code>building:levels</code> se compara con la <b>estimación 2.5D</b> (<code>pisos_25d</code>: altura mediana 2016–2023 → pisos con el modelo híbrido de 7.9) del edificio cuya huella lo contiene (o, si no, el de centroide a &lt; 8 m). Donde OSM existe y el 2.5D no lo contradice, el modelo ya usa los pisos de OSM (<code>pisos_metodo = osm</code>).</div>
-    <div id="res-osm"></div>
-    <div class="nota">En el mapa (capa «Validación de pisos con OSM»): color = pisos 2.5D − pisos de OSM (azul: el 2.5D se queda corto; rojo: se pasa; gris: sin pareja).</div>
-    <h2>Edificios altos peor estimados (OSM ≥ 10 pisos)</h2>
-    <div class="nota">Clic para ir al edificio; en la ficha hay un enlace a la vista 3D de Google para contar los pisos.</div>
-    <div id="peores"></div>
-
-    <h2>Chequeos automáticos</h2>
-    <div id="chequeos"></div>
   </aside>
   <div id="mapa"></div>
 </div>
@@ -194,7 +169,6 @@ L.control.scale({ imperial: false }).addTo(mapa);
   mapa.createPane(n).style.zIndex = z;
 });
 mapa.getPane("distritos").style.pointerEvents = "none";
-document.getElementById("generado").textContent = `Datos del lakehouse · generado ${D.generado}`;
 
 // ---------------- capa canvas genérica (miles de puntos/polígonos) ----------------
 const CapaCanvas = L.Layer.extend({
@@ -331,7 +305,6 @@ const alerta = i => {
   return a;
 };
 const bAlerta = Array.from({ length: nB }, (_, i) => alerta(i));
-const nAlertas = bAlerta.filter(a => a.length).length;
 let edifColor = () => "#999", edifLeyenda = null;
 function prepararColorEdif() {
   const k = document.getElementById("edif-color").value;
@@ -419,9 +392,6 @@ function popupEdif(i) {
 }
 document.getElementById("edif-color").onchange = () => { prepararColorEdif(); capaEdif.dibujar(); leyendas(); };
 soloMalos.onchange = () => capaEdif.dibujar();
-document.getElementById("nota-edif").innerHTML =
-  `${nB.toLocaleString("es-PE")} edificios: todos los de los 6 distritos de estudio. ` +
-  `Desde zoom 15 se dibuja la huella real. El fondo Esri calza con las huellas; el satélite de Google en Lima está corrido unos 4–6 m al este y los techos de los edificios altos salen inclinados por el ángulo de la foto.`;
 
 // ---------------- validación OSM ----------------
 const O = D.osm, nO = O.osm_id.length;
@@ -548,60 +518,6 @@ for (const [id, capa] of Object.entries(capas)) {
   const aplicar = () => { cb.checked ? capa.addTo(mapa) : capa.remove(); leyendas(); };
   cb.onchange = aplicar; aplicar();
 }
-
-// ---------------- panel de chequeos ----------------
-const G = D.chequeos.globales, M = D.chequeos.muestra, OS = D.chequeos.osm;
-const pct = (n, tot) => `${n.toLocaleString("es-PE")} (${fmt(100 * n / tot, 2)} %)`;
-const fila = (nombre, valor, estado) => `<div class="fila"><span>${nombre}</span><b class="${estado || ""}">${valor}</b></div>`;
-const estadoCero = n => n === 0 ? "ok" : "mal";
-const totalEsc = Object.values(D.chequeos.edificios_en_riesgo_h3);
-document.getElementById("res-osm").innerHTML =
-  fila("Edificios OSM con pisos", OS.n_osm.toLocaleString("es-PE")) +
-  fila("Con pareja en el modelo", `${pct(OS.n, OS.n_osm)}`) + fila("… por huella que lo contiene", OS.por_huella.toLocaleString("es-PE")) +
-  fila("… el modelo usa sus pisos de OSM", OS.con_pisos_osm.toLocaleString("es-PE"), "ok") +
-  `<div class="nota">Error de la estimación 2.5D (la que tienen los edificios sin OSM):</div>` +
-  fila("Error absoluto medio", fmt(OS.mae) + " pisos") +
-  fila("Sesgo (modelo − OSM)", fmt(OS.sesgo) + " pisos", Math.abs(OS.sesgo) < 0.5 ? "ok" : "aviso") +
-  fila("Coinciden exacto", fmt(OS.pct_exacto, 1) + " %") + fila("Dentro de ±1 piso", fmt(OS.pct_pm1, 1) + " %") + fila("Correlación", fmt(OS.corr, 3)) +
-  `<table class="tabla-grupos"><tr><th>OSM</th><th>n</th><th>OSM</th><th>2.5D</th><th>altura</th><th>sesgo</th><th>±1</th></tr>` +
-  OS.por_grupo.map(g => `<tr><td>${g.grupo}</td><td>${g.con_par.toLocaleString("es-PE")}</td><td>${fmt(g.niveles_medio, 1)}</td>` +
-    `<td>${fmt(g.pisos_medio, 1)}</td><td>${fmt(g.altura_media, 0)} m</td>` +
-    `<td class="${Math.abs(g.sesgo) <= 1 ? "ok" : "mal"}">${g.sesgo > 0 ? "+" : ""}${fmt(g.sesgo, 1)}</td><td>${fmt(g.pct_pm1, 0)} %</td></tr>`).join("") +
-  `</table><div class="nota">Pisos medios según OSM y según la estimación 2.5D, altura 2.5D media, sesgo (2.5D − OSM) y % dentro de ±1 piso, por tamaño real del edificio. La estimación usa la altura mediana de 2016–2023 y el modelo híbrido de la sección 7.9 (gradient boosting hasta 40 m, <code>pisos = (altura + 0.31) / 3.32</code> arriba). El modelo se entrenó con estos edificios, así que esta tabla sale optimista; con validación cruzada por bloques el error medio es 1.54 pisos y el 71 % queda dentro de ±1. En torres altas sigue quedándose corta, por eso se usan los pisos de OSM donde existen.</div>`;
-document.getElementById("peores").innerHTML = OS.peores.map((p, k) =>
-  `<div class="fila enlace" data-k="${k}"><span>OSM ${fmt(p.niveles, 0)} → 2.5D ${p.pisos} → final ${p.pisos_final}</span><b class="mal">${p.pisos - p.niveles > 0 ? "+" : ""}${fmt(p.pisos - p.niveles, 0)}</b></div>`).join("");
-document.querySelectorAll("#peores .enlace").forEach(el => el.onclick = () => {
-  const p = OS.peores[+el.dataset.k];
-  if (!mapa.hasLayer(capaOsm)) document.getElementById("c-osm").click();
-  mapa.setView([p.lat, p.lon], 19);
-  const i = O.osm_id.indexOf(p.osm_id);
-  if (i >= 0) L.popup().setLatLng([p.lat, p.lon]).setContent(popupOsm(i)).openOn(mapa);
-});
-document.getElementById("chequeos").innerHTML =
-  `<div class="nota">Sobre los ${G.total.toLocaleString("es-PE")} edificios de silver_edificios (en Databricks):</div>` +
-  fila("h3_r8 ≠ r8 calculado directo de lon/lat", pct(G.h3_r8_distinto, G.total), "aviso") +
-  `<div class="nota">Es esperado: h3_r8 es el padre del r9 y en H3 los hijos no caen exactamente dentro del padre. Lo que importa es que padre(h3_id) = h3_r8 (siguiente fila).</div>` +
-  fila("h3_id ≠ H3 r9 recalculado", pct(G.h3_r9_distinto, G.total), estadoCero(G.h3_r9_distinto)) +
-  fila("h3_id no es resolución 9", pct(G.h3_id_no_r9, G.total), estadoCero(G.h3_id_no_r9)) +
-  fila("padre(h3_id) ≠ h3_r8", pct(G.padre_distinto, G.total), estadoCero(G.padre_distinto)) +
-  fila("Sin distrito", pct(G.sin_distrito, G.total), estadoCero(G.sin_distrito)) +
-  fila("Sin pisos / sin Vs30", `${G.sin_pisos} / ${G.sin_vs30}`, estadoCero(G.sin_pisos + G.sin_vs30)) +
-  fila("Altura imputada", pct(G.altura_imputada, G.total), "aviso") +
-  fila("Altura/piso fuera de 1.8–6 m", pct(G.altura_por_piso_rara, G.total), G.altura_por_piso_rara / G.total < 0.01 ? "ok" : "aviso") +
-  `<div class="nota">Todos son de 1 piso con altura medida &lt; 1.8 m (la altura 2.5D de Open Buildings subestima construcciones bajas).</div>` +
-  fila("Altura p1 / p50 / p99", (G.altura_p01_p50_p99 || []).map(v => fmt(v, 1)).join(" / ") + " m") +
-  fila("Altura máx / pisos máx", `${fmt(G.altura_max, 1)} m / ${G.pisos_max}`) +
-  fila("Lon", `${fmt(G.lon_min, 3)} … ${fmt(G.lon_max, 3)}`) + fila("Lat", `${fmt(G.lat_min, 3)} … ${fmt(G.lat_max, 3)}`) +
-  `<div class="nota" style="margin-top:8px">Hexágonos y gold:</div>` +
-  fila("Hexágonos con edificios", D.chequeos.hex_con_edificios.toLocaleString("es-PE")) +
-  fila("Hexágonos de riesgo_h3 sin edificios", D.chequeos.hex_sin_edificios, estadoCero(D.chequeos.hex_sin_edificios)) +
-  fila("Edificios en riesgo_h3 (por escenario)", totalEsc.every(v => v === G.total) ? "= total" : `${Math.min(...totalEsc).toLocaleString("es-PE")} … ${Math.max(...totalEsc).toLocaleString("es-PE")}`,
-    totalEsc.every(v => v === G.total) ? "ok" : "aviso") +
-  `<div class="nota" style="margin-top:8px">Sobre los edificios del mapa (${M.muestra.toLocaleString("es-PE")}):</div>` +
-  fila("Centroide fuera de su distrito", pct(M.distrito_distinto, M.muestra), M.distrito_distinto / M.muestra < 0.005 ? "ok" : "aviso") +
-  fila("Punto a > 5 m del centroide de la huella", pct(M.centroide_lejos_5m, M.muestra), estadoCero(M.centroide_lejos_5m)) +
-  fila("Edificios con alguna alerta", pct(nAlertas, nB), "aviso") +
-  `<div class="nota">Marque «Solo edificios con alerta» o coloree por «Alertas» para verlos en el mapa.</div>`;
 
 prepararColorEdif();
 pintarHex();
