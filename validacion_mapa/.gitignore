@@ -1,3 +1,7 @@
 google_maps_key.txt
 mapa_validacion.html
 datos_cache.json
+simulador_local.html
+simulador_cache.json
+datos_cache/
+datos_mapa/

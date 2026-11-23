@@ -1,6 +1,10 @@
 command: ["python", "app.py"]
 env:
-  - name: ARCHIVO_DATOS
-    value: "/Volumes/grupo06proyectofinal/sismos/web/mapa_validacion/datos.json"
+  - name: ARCHIVO_BASE
+    value: "/Volumes/grupo06proyectofinal/sismos/web/mapa_validacion/base.json"
+  - name: CARPETA_DISTRITOS
+    value: "/Volumes/grupo06proyectofinal/sismos/web/mapa_validacion/distritos"
+  - name: ARCHIVO_SIMULADOR
+    value: "/Volumes/grupo06proyectofinal/sismos/web/simulador/simulador.json"
   - name: REVISAR_CADA_S
     value: "300"
